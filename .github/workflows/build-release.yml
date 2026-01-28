@@ -14,16 +14,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '6.0.x'
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
 
-    - name: Restore dependencies
-      run: dotnet restore CorelDrawAutoIgnoreError.csproj
+    - name: Setup NuGet
+      uses: NuGet/setup-nuget@v2
 
-    - name: Build
-      run: dotnet build CorelDrawAutoIgnoreError.csproj -c Release --no-restore
+    - name: Restore NuGet packages
+      run: nuget restore CorelDrawAutoIgnoreError.csproj -PackagesDirectory packages
+
+    - name: Build with MSBuild
+      run: msbuild CorelDrawAutoIgnoreError.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:OutputPath=bin\Release\net472\
 
     - name: Create deployment package
       run: |
