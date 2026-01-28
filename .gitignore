@@ -1,0 +1,48 @@
+# .gitignore - CorelDRAW 插件项目
+
+# 编译输出
+bin/
+obj/
+deploy/
+*.dll
+*.pdb
+*.exe
+
+# 发布包
+*.zip
+*.rar
+*.7z
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# 编译日志
+*.log
+
+# Windows安装记录
+install.log
+
+# Mac系统文件
+.DS_Store
+._*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 临时文件
+*.tmp
+*.bak
+*.cache
+
+# 保留installer目录下的bat和txt文件
+!installer/*.bat
+!installer/*.txt
+!installer/*.reg

@@ -1,0 +1,72 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore CorelDrawAutoIgnoreError.csproj
+
+    - name: Build
+      run: dotnet build CorelDrawAutoIgnoreError.csproj -c Release --no-restore
+
+    - name: Create deployment package
+      run: |
+        mkdir deploy
+        copy bin\Release\net472\CorelDrawAutoIgnoreError.dll deploy\
+        copy installer\install.bat deploy\
+        copy installer\uninstall.bat deploy\
+        copy installer\register_plugin.reg deploy\
+        copy README.md deploy\
+        copy installer\使用说明.txt deploy\
+      shell: cmd
+
+    - name: Create ZIP archive
+      run: |
+        Compress-Archive -Path deploy\* -DestinationPath CorelDRAW-AutoIgnoreError-Plugin.zip
+      shell: powershell
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: CorelDRAW-AutoIgnoreError-Plugin
+        path: CorelDRAW-AutoIgnoreError-Plugin.zip
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: CorelDRAW-AutoIgnoreError-Plugin.zip
+        body: |
+          ## CorelDRAW 自动忽略错误插件
+
+          ### 安装方法
+          1. 下载并解压 `CorelDRAW-AutoIgnoreError-Plugin.zip`
+          2. 右键点击 `install.bat`,选择"以管理员身份运行"
+          3. 按照提示完成安装
+          4. 重启CorelDRAW
+
+          ### 卸载方法
+          右键点击 `uninstall.bat`,选择"以管理员身份运行"
+
+          ### 系统要求
+          - Windows 7/8/10/11
+          - CorelDRAW X7或更高版本
+          - .NET Framework 4.7.2或更高版本
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

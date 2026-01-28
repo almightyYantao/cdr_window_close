@@ -1,0 +1,32 @@
+Windows Registry Editor Version 5.00
+
+; CorelDRAW 自动忽略错误插件注册文件
+; 使用前请修改以下内容:
+; 1. 替换 GUID {A1B2C3D4-E5F6-7890-ABCD-EF1234567890} 为你代码中使用的GUID
+; 2. 替换 C:\\Path\\To\\Your\\CorelDrawAutoIgnoreError.dll 为实际的DLL文件路径
+
+[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
+@="CorelDRAW Auto Ignore Error Plugin"
+
+[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\InprocServer32]
+@="C:\\Path\\To\\Your\\CorelDrawAutoIgnoreError.dll"
+"ThreadingModel"="Both"
+"Class"="CorelDrawAutoIgnoreError.CorelDrawPlugin"
+"Assembly"="CorelDrawAutoIgnoreError"
+"RuntimeVersion"="v4.0.30319"
+"CodeBase"="file:///C:/Path/To/Your/CorelDrawAutoIgnoreError.dll"
+
+[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}]
+
+[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\ProgID]
+@="CorelDrawAutoIgnoreError.CorelDrawPlugin"
+
+; CorelDRAW 加载插件配置
+; 注意: 以下路径可能因CorelDRAW版本而异,请根据实际情况调整
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Corel\CorelDRAW\23.0\Addins]
+"CorelDrawAutoIgnoreError"="C:\\Path\\To\\Your\\CorelDrawAutoIgnoreError.dll"
+
+; 如果是64位系统
+[HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Corel\CorelDRAW\23.0\Addins]
+"CorelDrawAutoIgnoreError"="C:\\Path\\To\\Your\\CorelDrawAutoIgnoreError.dll"
