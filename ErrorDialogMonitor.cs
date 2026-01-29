@@ -19,6 +19,7 @@ namespace CorelDrawAutoIgnoreError
         private Config _config;
         private string _configPath;
         private string _logPath;
+        private int _scanCount = 0;
 
         // Windows API
         [DllImport("user32.dll")]
@@ -55,6 +56,10 @@ namespace CorelDrawAutoIgnoreError
         {
             _config = Config.Load(_configPath);
             LogDebug($"加载了 {_config.DialogRules.Count} 个对话框规则");
+            foreach (var rule in _config.DialogRules)
+            {
+                LogDebug($"  - {rule.Name}: 标题包含[{string.Join(",", rule.WindowTitleContains)}] 内容包含[{string.Join(",", rule.ContentContains)}] → 点击'{rule.ButtonToClick}'");
+            }
         }
 
         private void LogDebug(string message)
@@ -92,15 +97,22 @@ namespace CorelDrawAutoIgnoreError
             {
                 try
                 {
+                    _scanCount++;
+
+                    // 每10秒记录一次扫描状态
+                    if (_scanCount % 100 == 0)
+                    {
+                        LogDebug($"[扫描中] 已扫描 {_scanCount} 次，自动点击 {_autoClickCount} 次");
+                        LogAllVisibleWindows(); // 列出所有可见窗口
+                    }
+
                     foreach (var rule in _config.DialogRules)
                     {
                         IntPtr dialog = FindDialog(rule);
 
                         if (dialog != IntPtr.Zero && IsWindowVisible(dialog))
                         {
-                            LogDebug($"发现匹配规则: {rule.Name}");
-
-                            // 详细记录窗口信息
+                            LogDebug($"✓✓✓ 发现匹配规则: {rule.Name}");
                             LogWindowDetails(dialog);
 
                             if (ClickButton(dialog, rule.ButtonToClick))
@@ -124,6 +136,29 @@ namespace CorelDrawAutoIgnoreError
                     Thread.Sleep(1000);
                 }
             }
+        }
+
+        private void LogAllVisibleWindows()
+        {
+            LogDebug("--- 当前所有可见窗口 ---");
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (IsWindowVisible(hWnd))
+                {
+                    StringBuilder titleSb = new StringBuilder(256);
+                    GetWindowText(hWnd, titleSb, titleSb.Capacity);
+                    string title = titleSb.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(title))
+                    {
+                        LogDebug($"  窗口: [{title}]");
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            LogDebug("--- 列表结束 ---");
         }
 
         private void LogWindowDetails(IntPtr hwnd)
