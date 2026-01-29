@@ -153,6 +153,25 @@ namespace CorelDrawAutoIgnoreError
                     if (!string.IsNullOrWhiteSpace(title))
                     {
                         LogDebug($"  窗口: [{title}]");
+
+                        // 记录这个窗口的子控件文本
+                        var childTexts = new System.Collections.Generic.List<string>();
+                        EnumChildWindows(hWnd, (childHwnd, childLParam) =>
+                        {
+                            StringBuilder textSb = new StringBuilder(512);
+                            GetWindowText(childHwnd, textSb, textSb.Capacity);
+                            string text = textSb.ToString();
+                            if (!string.IsNullOrWhiteSpace(text))
+                            {
+                                childTexts.Add(text);
+                            }
+                            return true;
+                        }, IntPtr.Zero);
+
+                        if (childTexts.Count > 0)
+                        {
+                            LogDebug($"    子控件文本: {string.Join(", ", childTexts)}");
+                        }
                     }
                 }
                 return true;
@@ -189,6 +208,7 @@ namespace CorelDrawAutoIgnoreError
         private IntPtr FindDialog(DialogRule rule)
         {
             IntPtr result = IntPtr.Zero;
+            bool debugDetailed = _scanCount % 100 == 1; // 每10秒详细检查一次
 
             EnumWindows((hWnd, lParam) =>
             {
@@ -198,18 +218,25 @@ namespace CorelDrawAutoIgnoreError
                 GetWindowText(hWnd, titleSb, titleSb.Capacity);
                 string title = titleSb.ToString();
 
+                if (string.IsNullOrWhiteSpace(title)) return true;
+
                 // 检查窗口标题
                 bool titleMatch = rule.WindowTitleContains.Any(keyword =>
                     title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
 
-                if (titleMatch)
+                // 检查窗口内容
+                bool contentMatch = ContainsContent(hWnd, rule.ContentContains);
+
+                // 详细调试:显示每个窗口的匹配情况
+                if (debugDetailed && (titleMatch || contentMatch))
                 {
-                    // 检查窗口内容
-                    if (ContainsContent(hWnd, rule.ContentContains))
-                    {
-                        result = hWnd;
-                        return false;
-                    }
+                    LogDebug($"[规则:{rule.Name}] 窗口[{title}] 标题匹配={titleMatch} 内容匹配={contentMatch}");
+                }
+
+                if (titleMatch && contentMatch)
+                {
+                    result = hWnd;
+                    return false;
                 }
                 return true;
             }, IntPtr.Zero);
