@@ -27,7 +27,13 @@ jobs:
       run: nuget restore CorelDrawErrorMonitor.csproj -PackagesDirectory packages
 
     - name: Build with MSBuild
-      run: msbuild CorelDrawErrorMonitor.csproj /p:Configuration=Release /p:Platform="Any CPU"
+      run: msbuild CorelDrawErrorMonitor.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:OutputPath=bin\Release\
+
+    - name: List build output
+      run: |
+        echo Listing bin\Release directory:
+        dir /s /b bin\Release
+      shell: cmd
 
     - name: Create deployment package
       run: |
