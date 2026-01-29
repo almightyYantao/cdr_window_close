@@ -16,9 +16,21 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Newtonsoft.Json for config -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 排除不需要的文件 -->
     <Compile Remove="CorelDrawPlugin.cs" />
     <Compile Remove="CorelDrawPluginSimple.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 包含配置文件 -->
+    <None Update="config.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

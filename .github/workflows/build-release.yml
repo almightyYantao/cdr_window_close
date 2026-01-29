@@ -39,8 +39,16 @@ jobs:
       run: |
         mkdir deploy
         copy bin\Release\CorelDrawErrorMonitor.exe deploy\
+        copy bin\Release\config.json deploy\
+        copy bin\Release\Newtonsoft.Json.dll deploy\
         copy START.bat deploy\
-        copy 独立程序说明.md deploy\README.md
+        echo # CorelDRAW Error Monitor > deploy\README.txt
+        echo. >> deploy\README.txt
+        echo 1. Double-click START.bat >> deploy\README.txt
+        echo 2. Check system tray for the icon >> deploy\README.txt
+        echo 3. Right-click icon to exit >> deploy\README.txt
+        echo. >> deploy\README.txt
+        echo Edit config.json to add more dialog rules. >> deploy\README.txt
       shell: cmd
 
     - name: Create ZIP archive

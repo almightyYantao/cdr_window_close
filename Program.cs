@@ -1,143 +1,111 @@
 using System;
 using System.Windows.Forms;
 using System.Drawing;
+using System.Diagnostics;
 using System.Threading;
 
 namespace CorelDrawAutoIgnoreError
 {
-    /// <summary>
-    /// 独立运行的监控程序 - 不需要作为CorelDRAW插件
-    /// </summary>
     static class Program
     {
-        private static ErrorDialogMonitor _monitor;
+        private static Mutex _mutex;
         private static NotifyIcon _trayIcon;
-        private static bool _isRunning = false;
+        private static ErrorDialogMonitor _monitor;
 
         [STAThread]
         static void Main()
         {
+            // 检查是否已运行
+            bool createdNew;
+            _mutex = new Mutex(true, "CorelDrawErrorMonitor_SingleInstance", out createdNew);
+
+            if (!createdNew)
+            {
+                MessageBox.Show(
+                    "CorelDRAW Error Monitor is already running!\n\n" +
+                    "Check the system tray (near the clock).\n\n" +
+                    "程序已在运行！请检查系统托盘。",
+                    "Already Running",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // 检查是否已经有实例在运行
-            bool createdNew;
-            using (var mutex = new Mutex(true, "CorelDrawAutoIgnoreErrorMonitor", out createdNew))
+            // 创建托盘图标
+            _trayIcon = new NotifyIcon
             {
-                if (!createdNew)
-                {
-                    MessageBox.Show(
-                        "The monitor is already running!\n\n" +
-                        "监控程序已经在运行中！\n\n" +
-                        "Check the system tray (near the clock).",
-                        "Already Running",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information);
-                    return;
-                }
-
-                // 创建系统托盘图标
-                CreateTrayIcon();
-
-                // 启动监控
-                StartMonitoring();
-
-                // 显示启动消息
-                _trayIcon.ShowBalloonTip(3000,
-                    "CorelDRAW Error Monitor",
-                    "Monitoring started! Error dialogs will be auto-ignored.\n监控已启动！",
-                    ToolTipIcon.Info);
-
-                // 运行应用程序
-                Application.Run();
-            }
-        }
-
-        private static void CreateTrayIcon()
-        {
-            _trayIcon = new NotifyIcon();
-            _trayIcon.Text = "CorelDRAW Auto Ignore Error - Running";
-            _trayIcon.Icon = SystemIcons.Application; // 使用系统默认图标
+                Icon = SystemIcons.Application,
+                Text = "CorelDRAW Error Monitor",
+                Visible = true
+            };
 
             // 创建右键菜单
             var contextMenu = new ContextMenuStrip();
-
-            var statusItem = new ToolStripMenuItem("✓ Monitoring Active");
-            statusItem.Enabled = false;
-            contextMenu.Items.Add(statusItem);
-
+            contextMenu.Items.Add("✓ Monitoring Active", null, null).Enabled = false;
             contextMenu.Items.Add(new ToolStripSeparator());
-
-            var aboutItem = new ToolStripMenuItem("About / 关于");
-            aboutItem.Click += (s, e) => ShowAbout();
-            contextMenu.Items.Add(aboutItem);
-
-            var exitItem = new ToolStripMenuItem("Exit / 退出");
-            exitItem.Click += (s, e) => ExitApplication();
-            contextMenu.Items.Add(exitItem);
+            contextMenu.Items.Add("About / 关于", null, ShowAbout);
+            contextMenu.Items.Add("Reload Config / 重载配置", null, ReloadConfig);
+            contextMenu.Items.Add(new ToolStripSeparator());
+            contextMenu.Items.Add("Exit / 退出", null, Exit);
 
             _trayIcon.ContextMenuStrip = contextMenu;
-            _trayIcon.Visible = true;
+            _trayIcon.DoubleClick += ShowAbout;
 
-            // 双击托盘图标显示关于
-            _trayIcon.DoubleClick += (s, e) => ShowAbout();
+            // 启动监控
+            _monitor = new ErrorDialogMonitor();
+            _monitor.Start();
+
+            // 显示启动提示
+            _trayIcon.ShowBalloonTip(
+                3000,
+                "CorelDRAW Error Monitor",
+                "Monitoring started. Auto-clicking error dialogs.\n监控已启动,自动处理错误对话框。",
+                ToolTipIcon.Info);
+
+            Application.Run();
+
+            // 清理
+            _monitor.Stop();
+            _trayIcon.Dispose();
+            _mutex?.ReleaseMutex();
         }
 
-        private static void StartMonitoring()
+        private static void ShowAbout(object sender, EventArgs e)
         {
-            try
-            {
-                _monitor = new ErrorDialogMonitor();
-                _monitor.Start();
-                _isRunning = true;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"Failed to start monitoring!\n\n" +
-                    $"Error: {ex.Message}\n\n" +
-                    $"启动监控失败: {ex.Message}",
-                    "Error",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
-            }
-        }
+            int clickCount = _monitor?.GetAutoClickCount() ?? 0;
 
-        private static void ShowAbout()
-        {
             MessageBox.Show(
-                "CorelDRAW Auto Ignore Error Monitor\n" +
-                "Version 1.0\n\n" +
-                "This program automatically clicks 'Ignore' on CorelDRAW error dialogs.\n\n" +
-                "本程序自动点击CorelDRAW错误对话框的'忽略'按钮。\n\n" +
-                "Status: " + (_isRunning ? "✓ Running" : "✗ Stopped") + "\n\n" +
-                "To exit: Right-click the tray icon and select Exit.\n" +
-                "退出: 右键点击托盘图标,选择退出。",
-                "About CorelDRAW Error Monitor",
+                $"CorelDRAW Error Monitor v1.0\n\n" +
+                $"Status: Monitoring Active\n" +
+                $"Auto-clicks: {clickCount}\n\n" +
+                $"This program automatically clicks buttons\n" +
+                $"on CorelDRAW error dialogs.\n\n" +
+                $"状态: 监控中\n" +
+                $"自动点击次数: {clickCount}\n\n" +
+                $"Right-click tray icon to exit.\n" +
+                $"右键托盘图标可退出。",
+                "About / 关于",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
         }
 
-        private static void ExitApplication()
+        private static void ReloadConfig(object sender, EventArgs e)
         {
-            var result = MessageBox.Show(
-                "Stop monitoring and exit?\n\n" +
-                "停止监控并退出程序？",
-                "Confirm Exit",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
+            _monitor?.ReloadConfig();
+            MessageBox.Show(
+                "Configuration reloaded!\n\n配置已重新加载!",
+                "Success",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
 
-            if (result == DialogResult.Yes)
-            {
-                if (_monitor != null)
-                {
-                    _monitor.Stop();
-                }
-
-                _trayIcon.Visible = false;
-                _trayIcon.Dispose();
-                Application.Exit();
-            }
+        private static void Exit(object sender, EventArgs e)
+        {
+            _trayIcon.Visible = false;
+            Application.Exit();
         }
     }
 }

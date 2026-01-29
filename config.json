@@ -1,0 +1,26 @@
+{
+  "dialogRules": [
+    {
+      "name": "无效的轮廓ID错误",
+      "windowTitleContains": ["文件", ".cdr", "CorelDRAW"],
+      "contentContains": ["无效的轮廓", "忽略", "重试"],
+      "buttonToClick": "忽略"
+    },
+    {
+      "name": "自动备份文件提示",
+      "windowTitleContains": ["CorelDRAW"],
+      "contentContains": ["自动备份", "是否要打开"],
+      "buttonToClick": "取消"
+    },
+    {
+      "name": "其他错误对话框",
+      "windowTitleContains": ["错误", "警告", "CorelDRAW"],
+      "contentContains": ["忽略"],
+      "buttonToClick": "忽略"
+    }
+  ],
+  "settings": {
+    "checkInterval": 100,
+    "showNotifications": false
+  }
+}

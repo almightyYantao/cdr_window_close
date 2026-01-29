@@ -1,0 +1,36 @@
+# CorelDRAW错误自动处理工具
+
+## 使用方法
+1. 双击 `START.bat`
+2. 查看系统托盘（时钟旁边）图标
+3. 右键图标可退出
+
+## 添加新的对话框规则
+编辑 `config.json` 文件，添加新规则：
+
+```json
+{
+  "name": "你的规则名称",
+  "windowTitleContains": ["窗口标题关键词"],
+  "contentContains": ["对话框内容关键词"],
+  "buttonToClick": "要点击的按钮文本"
+}
+```
+
+### 示例
+如你的截图，要自动点击"取消"：
+
+```json
+{
+  "name": "自动备份提示",
+  "windowTitleContains": ["CorelDRAW"],
+  "contentContains": ["自动备份", "是否要打开"],
+  "buttonToClick": "取消"
+}
+```
+
+保存后，右键托盘图标 → Reload Config
+
+## 已支持的规则
+- 无效的轮廓ID → 点击"忽略"
+- 自动备份提示 → 点击"取消"
