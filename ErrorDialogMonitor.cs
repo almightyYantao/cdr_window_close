@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
 
 namespace CorelDrawAutoIgnoreError
 {
@@ -15,6 +16,7 @@ namespace CorelDrawAutoIgnoreError
         private CancellationTokenSource _cancellationTokenSource;
         private Task _monitorTask;
         private bool _isMonitoring;
+        private int _autoIgnoreCount = 0; // 记录自动忽略的次数
 
         // Windows API 声明
         [DllImport("user32.dll", SetLastError = true)]
@@ -98,7 +100,11 @@ namespace CorelDrawAutoIgnoreError
 
                         if (success)
                         {
-                            Debug.WriteLine("成功点击'忽略'按钮");
+                            _autoIgnoreCount++;
+                            Debug.WriteLine($"成功点击'忽略'按钮 (第{_autoIgnoreCount}次)");
+
+                            // 显示通知(可选 - 注释掉以避免频繁弹窗)
+                            // ShowNotification($"Auto-ignored error dialog #{_autoIgnoreCount}");
                         }
                         else
                         {
@@ -106,6 +112,9 @@ namespace CorelDrawAutoIgnoreError
                             // 尝试备用方法
                             TryAlternativeClick(errorDialog);
                         }
+
+                        // 等待500ms,避免重复处理同一个对话框
+                        Thread.Sleep(500);
                     }
 
                     // 检查间隔 - 每100ms检查一次

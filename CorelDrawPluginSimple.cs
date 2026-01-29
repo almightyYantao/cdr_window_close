@@ -38,13 +38,27 @@ namespace CorelDrawAutoIgnoreError
                 _errorMonitor = new ErrorDialogMonitor();
                 _errorMonitor.Start();
 
-                MessageBox.Show("CorelDRAW自动忽略错误插件已加载", "插件信息",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                // 显示成功加载的绿色提示框
+                MessageBox.Show(
+                    "✓ Plugin Loaded Successfully!\n\n" +
+                    "The error dialog auto-ignore feature is now active.\n\n" +
+                    "When you open CDR files with errors, the error dialogs\n" +
+                    "will be automatically dismissed by clicking 'Ignore'.\n\n" +
+                    "插件加载成功！\n" +
+                    "错误对话框自动忽略功能已启用。",
+                    "CorelDRAW Auto Ignore Error Plugin",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"插件加载失败: {ex.Message}", "错误",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(
+                    $"✗ Plugin Loading Failed!\n\n" +
+                    $"Error: {ex.Message}\n\n" +
+                    $"插件加载失败: {ex.Message}",
+                    "CorelDRAW Plugin Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
 
