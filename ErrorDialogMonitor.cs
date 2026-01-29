@@ -18,6 +18,7 @@ namespace CorelDrawAutoIgnoreError
         private int _autoClickCount = 0;
         private Config _config;
         private string _configPath;
+        private string _logPath;
 
         // Windows API
         [DllImport("user32.dll")]
@@ -35,6 +36,9 @@ namespace CorelDrawAutoIgnoreError
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
@@ -43,13 +47,25 @@ namespace CorelDrawAutoIgnoreError
         public ErrorDialogMonitor()
         {
             _configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.json");
+            _logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug.log");
             LoadConfig();
         }
 
         private void LoadConfig()
         {
             _config = Config.Load(_configPath);
-            Debug.WriteLine($"加载了 {_config.DialogRules.Count} 个对话框规则");
+            LogDebug($"加载了 {_config.DialogRules.Count} 个对话框规则");
+        }
+
+        private void LogDebug(string message)
+        {
+            try
+            {
+                string log = $"[{DateTime.Now:HH:mm:ss}] {message}";
+                Debug.WriteLine(log);
+                File.AppendAllText(_logPath, log + Environment.NewLine);
+            }
+            catch { }
         }
 
         public void Start()
@@ -59,7 +75,7 @@ namespace CorelDrawAutoIgnoreError
             _isMonitoring = true;
             _cancellationTokenSource = new CancellationTokenSource();
             _monitorTask = Task.Run(() => MonitorLoop(_cancellationTokenSource.Token));
-            Debug.WriteLine("监控已启动");
+            LogDebug("监控已启动");
         }
 
         public void Stop()
@@ -67,7 +83,7 @@ namespace CorelDrawAutoIgnoreError
             _isMonitoring = false;
             _cancellationTokenSource?.Cancel();
             _monitorTask?.Wait(TimeSpan.FromSeconds(2));
-            Debug.WriteLine("监控已停止");
+            LogDebug("监控已停止");
         }
 
         private void MonitorLoop(CancellationToken cancellationToken)
@@ -82,13 +98,20 @@ namespace CorelDrawAutoIgnoreError
 
                         if (dialog != IntPtr.Zero && IsWindowVisible(dialog))
                         {
-                            Debug.WriteLine($"发现匹配规则: {rule.Name}");
+                            LogDebug($"发现匹配规则: {rule.Name}");
+
+                            // 详细记录窗口信息
+                            LogWindowDetails(dialog);
 
                             if (ClickButton(dialog, rule.ButtonToClick))
                             {
                                 _autoClickCount++;
-                                Debug.WriteLine($"成功点击 '{rule.ButtonToClick}' 按钮 (第{_autoClickCount}次)");
-                                Thread.Sleep(500); // 避免重复处理
+                                LogDebug($"✓ 成功点击 '{rule.ButtonToClick}' 按钮 (第{_autoClickCount}次)");
+                                Thread.Sleep(500);
+                            }
+                            else
+                            {
+                                LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}'");
                             }
                         }
                     }
@@ -97,10 +120,35 @@ namespace CorelDrawAutoIgnoreError
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"监控错误: {ex.Message}");
+                    LogDebug($"监控错误: {ex.Message}");
                     Thread.Sleep(1000);
                 }
             }
+        }
+
+        private void LogWindowDetails(IntPtr hwnd)
+        {
+            StringBuilder titleSb = new StringBuilder(256);
+            GetWindowText(hwnd, titleSb, titleSb.Capacity);
+            LogDebug($"  窗口标题: [{titleSb}]");
+
+            LogDebug("  子控件:");
+            EnumChildWindows(hwnd, (childHwnd, lParam) =>
+            {
+                StringBuilder textSb = new StringBuilder(512);
+                StringBuilder classSb = new StringBuilder(256);
+                GetWindowText(childHwnd, textSb, textSb.Capacity);
+                GetClassName(childHwnd, classSb, classSb.Capacity);
+
+                string text = textSb.ToString();
+                string className = classSb.ToString();
+
+                if (!string.IsNullOrWhiteSpace(text) || className.Contains("Button"))
+                {
+                    LogDebug($"    [{className}] \"{text}\"");
+                }
+                return true;
+            }, IntPtr.Zero);
         }
 
         private IntPtr FindDialog(DialogRule rule)
@@ -116,13 +164,16 @@ namespace CorelDrawAutoIgnoreError
                 string title = titleSb.ToString();
 
                 // 检查窗口标题
-                if (rule.WindowTitleContains.Any(keyword => title.Contains(keyword)))
+                bool titleMatch = rule.WindowTitleContains.Any(keyword =>
+                    title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if (titleMatch)
                 {
                     // 检查窗口内容
                     if (ContainsContent(hWnd, rule.ContentContains))
                     {
                         result = hWnd;
-                        return false; // 停止枚举
+                        return false;
                     }
                 }
                 return true;
@@ -141,7 +192,7 @@ namespace CorelDrawAutoIgnoreError
                 GetWindowText(childHwnd, sb, sb.Capacity);
                 string text = sb.ToString();
 
-                if (keywords.Any(keyword => text.Contains(keyword)))
+                if (keywords.Any(keyword => text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     found = true;
                     return false;
@@ -162,9 +213,13 @@ namespace CorelDrawAutoIgnoreError
                 GetWindowText(childHwnd, sb, sb.Capacity);
                 string text = sb.ToString();
 
-                if (text.Equals(buttonText, StringComparison.OrdinalIgnoreCase) ||
-                    text.Contains(buttonText))
+                // 更宽松的匹配
+                if (!string.IsNullOrWhiteSpace(text) &&
+                    (text.Equals(buttonText, StringComparison.OrdinalIgnoreCase) ||
+                     text.IndexOf(buttonText, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     buttonText.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
+                    LogDebug($"    找到按钮: \"{text}\" (匹配 \"{buttonText}\")");
                     SendMessage(childHwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
                     clicked = true;
                     return false;
@@ -180,7 +235,9 @@ namespace CorelDrawAutoIgnoreError
         public void ReloadConfig()
         {
             LoadConfig();
-            Debug.WriteLine("配置已重新加载");
+            LogDebug("配置已重新加载");
         }
+
+        public string GetLogPath() => _logPath;
     }
 }

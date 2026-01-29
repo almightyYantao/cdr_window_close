@@ -3,6 +3,7 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Diagnostics;
 using System.Threading;
+using System.IO;
 
 namespace CorelDrawAutoIgnoreError
 {
@@ -15,7 +16,6 @@ namespace CorelDrawAutoIgnoreError
         [STAThread]
         static void Main()
         {
-            // 检查是否已运行
             bool createdNew;
             _mutex = new Mutex(true, "CorelDrawErrorMonitor_SingleInstance", out createdNew);
 
@@ -34,7 +34,6 @@ namespace CorelDrawAutoIgnoreError
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            // 创建托盘图标
             _trayIcon = new NotifyIcon
             {
                 Icon = SystemIcons.Application,
@@ -42,11 +41,11 @@ namespace CorelDrawAutoIgnoreError
                 Visible = true
             };
 
-            // 创建右键菜单
             var contextMenu = new ContextMenuStrip();
             contextMenu.Items.Add("✓ Monitoring Active", null, null).Enabled = false;
             contextMenu.Items.Add(new ToolStripSeparator());
             contextMenu.Items.Add("About / 关于", null, ShowAbout);
+            contextMenu.Items.Add("View Log / 查看日志", null, ViewLog);
             contextMenu.Items.Add("Reload Config / 重载配置", null, ReloadConfig);
             contextMenu.Items.Add(new ToolStripSeparator());
             contextMenu.Items.Add("Exit / 退出", null, Exit);
@@ -54,20 +53,17 @@ namespace CorelDrawAutoIgnoreError
             _trayIcon.ContextMenuStrip = contextMenu;
             _trayIcon.DoubleClick += ShowAbout;
 
-            // 启动监控
             _monitor = new ErrorDialogMonitor();
             _monitor.Start();
 
-            // 显示启动提示
             _trayIcon.ShowBalloonTip(
                 3000,
                 "CorelDRAW Error Monitor",
-                "Monitoring started. Auto-clicking error dialogs.\n监控已启动,自动处理错误对话框。",
+                "Monitoring started. Logging to debug.log\n监控已启动,日志保存到debug.log",
                 ToolTipIcon.Info);
 
             Application.Run();
 
-            // 清理
             _monitor.Stop();
             _trayIcon.Dispose();
             _mutex?.ReleaseMutex();
@@ -81,15 +77,42 @@ namespace CorelDrawAutoIgnoreError
                 $"CorelDRAW Error Monitor v1.0\n\n" +
                 $"Status: Monitoring Active\n" +
                 $"Auto-clicks: {clickCount}\n\n" +
-                $"This program automatically clicks buttons\n" +
-                $"on CorelDRAW error dialogs.\n\n" +
                 $"状态: 监控中\n" +
                 $"自动点击次数: {clickCount}\n\n" +
-                $"Right-click tray icon to exit.\n" +
-                $"右键托盘图标可退出。",
+                $"Debug log: debug.log\n" +
+                $"Right-click tray icon to view log or exit.\n\n" +
+                $"右键托盘图标可查看日志或退出。",
                 "About / 关于",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+        }
+
+        private static void ViewLog(object sender, EventArgs e)
+        {
+            string logPath = _monitor?.GetLogPath();
+            if (!string.IsNullOrEmpty(logPath) && File.Exists(logPath))
+            {
+                try
+                {
+                    Process.Start("notepad.exe", logPath);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(
+                        $"Cannot open log file:\n{ex.Message}\n\nPath: {logPath}",
+                        "Error",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Log file not found.\n\n日志文件未找到。",
+                    "Info",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
         }
 
         private static void ReloadConfig(object sender, EventArgs e)
