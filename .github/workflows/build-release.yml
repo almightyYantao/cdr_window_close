@@ -24,53 +24,62 @@ jobs:
       uses: NuGet/setup-nuget@v2
 
     - name: Restore NuGet packages
-      run: nuget restore CorelDrawAutoIgnoreError.csproj -PackagesDirectory packages
+      run: nuget restore CorelDrawErrorMonitor.csproj -PackagesDirectory packages
 
     - name: Build with MSBuild
-      run: msbuild CorelDrawAutoIgnoreError.csproj /p:Configuration=Release /p:Platform="Any CPU" /p:OutputPath=bin\Release\net472\
+      run: msbuild CorelDrawErrorMonitor.csproj /p:Configuration=Release /p:Platform="Any CPU"
 
     - name: Create deployment package
       run: |
         mkdir deploy
-        copy bin\Release\net472\CorelDrawAutoIgnoreError.dll deploy\
-        copy installer\install.bat deploy\
-        copy installer\uninstall.bat deploy\
-        copy installer\register_plugin.reg deploy\
-        copy README.md deploy\
-        copy installer\使用说明.txt deploy\
+        copy bin\Release\CorelDrawErrorMonitor.exe deploy\
+        copy START.bat deploy\
+        copy 独立程序说明.md deploy\README.md
       shell: cmd
 
     - name: Create ZIP archive
       run: |
-        Compress-Archive -Path deploy\* -DestinationPath CorelDRAW-AutoIgnoreError-Plugin.zip
+        Compress-Archive -Path deploy\* -DestinationPath CorelDRAW-Error-Monitor.zip
       shell: powershell
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: CorelDRAW-AutoIgnoreError-Plugin
-        path: CorelDRAW-AutoIgnoreError-Plugin.zip
+        name: CorelDRAW-Error-Monitor
+        path: CorelDRAW-Error-Monitor.zip
 
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
       uses: softprops/action-gh-release@v2
       with:
-        files: CorelDRAW-AutoIgnoreError-Plugin.zip
+        files: CorelDRAW-Error-Monitor.zip
         body: |
-          ## CorelDRAW 自动忽略错误插件
+          ## CorelDRAW 错误自动忽略监控程序
 
-          ### 安装方法
-          1. 下载并解压 `CorelDRAW-AutoIgnoreError-Plugin.zip`
-          2. 右键点击 `install.bat`,选择"以管理员身份运行"
-          3. 按照提示完成安装
-          4. 重启CorelDRAW
+          ### 🎯 这是什么?
+          一个独立运行的Windows程序,自动点击CorelDRAW错误对话框的"忽略"按钮。
 
-          ### 卸载方法
-          右键点击 `uninstall.bat`,选择"以管理员身份运行"
+          ### ✨ 使用方法
+          1. 下载并解压 `CorelDRAW-Error-Monitor.zip`
+          2. 双击 `START.bat` 启动程序
+          3. 程序在系统托盘运行(时钟旁边)
+          4. 打开CorelDRAW,错误对话框会自动关闭
+          5. 退出: 右键托盘图标 → Exit
 
-          ### 系统要求
+          ### ✅ 特点
+          - 不需要安装,解压即用
+          - 不需要管理员权限
+          - 在系统托盘后台运行
+          - 双击启动,右键退出
+          - 自动检测并处理错误对话框
+
+          ### 📋 系统要求
           - Windows 7/8/10/11
-          - CorelDRAW X7或更高版本
           - .NET Framework 4.7.2或更高版本
+
+          ### 🔍 验证运行
+          - 查看系统托盘(时钟旁边)是否有程序图标
+          - 双击托盘图标可以看到"关于"信息
+          - 再次运行START.bat会提示"Already Running"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
