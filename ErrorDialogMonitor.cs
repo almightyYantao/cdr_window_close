@@ -158,44 +158,15 @@ namespace CorelDrawAutoIgnoreError
                     {
                         LogDebug($"  窗口: [{title}]");
 
-                        // 记录这个窗口的子控件文本(包括类名)
-                        var childTexts = new System.Collections.Generic.List<string>();
-                        EnumChildWindows(hWnd, (childHwnd, childLParam) =>
+                        // 记录这个窗口的子控件文本(包括类名) - 递归收集
+                        var allTexts = new System.Collections.Generic.List<string>();
+                        CollectAllTextsRecursive(hWnd, allTexts, 0, 5);
+
+                        if (allTexts.Count > 0)
                         {
-                            // 获取类名
-                            StringBuilder classSb = new StringBuilder(256);
-                            GetClassName(childHwnd, classSb, classSb.Capacity);
-                            string className = classSb.ToString();
-
-                            // 方法1: GetWindowText
-                            StringBuilder textSb = new StringBuilder(512);
-                            GetWindowText(childHwnd, textSb, textSb.Capacity);
-                            string text = textSb.ToString();
-
-                            // 方法2: SendMessage WM_GETTEXT
-                            if (string.IsNullOrWhiteSpace(text))
-                            {
-                                StringBuilder textSb2 = new StringBuilder(512);
-                                SendMessage(childHwnd, WM_GETTEXT, (IntPtr)textSb2.Capacity, textSb2);
-                                text = textSb2.ToString();
-                            }
-
-                            // 显示类名和文本
-                            if (!string.IsNullOrWhiteSpace(text))
-                            {
-                                childTexts.Add($"[{className}] {text}");
-                            }
-                            else if (!string.IsNullOrWhiteSpace(className))
-                            {
-                                // 即使没有文本也显示类名,帮助调试
-                                childTexts.Add($"[{className}] (无文本)");
-                            }
-                            return true;
-                        }, IntPtr.Zero);
-
-                        if (childTexts.Count > 0)
-                        {
-                            LogDebug($"    子控件文本: {string.Join(", ", childTexts)}");
+                            // 去重并显示
+                            var uniqueTexts = allTexts.Distinct().ToList();
+                            LogDebug($"    所有文本(递归): {string.Join(", ", uniqueTexts)}");
                         }
                     }
                 }
@@ -271,7 +242,24 @@ namespace CorelDrawAutoIgnoreError
 
         private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
         {
-            bool found = false;
+            var allTexts = new System.Collections.Generic.List<string>();
+            CollectAllTextsRecursive(hwnd, allTexts, 0, 5); // 最多递归5层
+
+            // 检查是否包含关键词
+            foreach (var text in allTexts)
+            {
+                if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword =>
+                    text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void CollectAllTextsRecursive(IntPtr hwnd, System.Collections.Generic.List<string> texts, int depth, int maxDepth)
+        {
+            if (depth >= maxDepth) return;
 
             EnumChildWindows(hwnd, (childHwnd, lParam) =>
             {
@@ -288,15 +276,16 @@ namespace CorelDrawAutoIgnoreError
                     text = sb2.ToString();
                 }
 
-                if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword => text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
+                if (!string.IsNullOrWhiteSpace(text))
                 {
-                    found = true;
-                    return false;
+                    texts.Add(text);
                 }
+
+                // 递归检查子控件的子控件
+                CollectAllTextsRecursive(childHwnd, texts, depth + 1, maxDepth);
+
                 return true;
             }, IntPtr.Zero);
-
-            return found;
         }
 
         private bool ClickButton(IntPtr dialogHwnd, string buttonText)
