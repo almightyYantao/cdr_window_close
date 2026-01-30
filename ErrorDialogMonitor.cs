@@ -37,6 +37,9 @@ namespace CorelDrawAutoIgnoreError
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, StringBuilder lParam);
+
         [DllImport("user32.dll")]
         private static extern IntPtr GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
@@ -44,6 +47,7 @@ namespace CorelDrawAutoIgnoreError
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
         private const uint BM_CLICK = 0x00F5;
+        private const uint WM_GETTEXT = 0x000D;
 
         public ErrorDialogMonitor()
         {
@@ -158,9 +162,19 @@ namespace CorelDrawAutoIgnoreError
                         var childTexts = new System.Collections.Generic.List<string>();
                         EnumChildWindows(hWnd, (childHwnd, childLParam) =>
                         {
+                            // 方法1: GetWindowText
                             StringBuilder textSb = new StringBuilder(512);
                             GetWindowText(childHwnd, textSb, textSb.Capacity);
                             string text = textSb.ToString();
+
+                            // 方法2: SendMessage WM_GETTEXT
+                            if (string.IsNullOrWhiteSpace(text))
+                            {
+                                StringBuilder textSb2 = new StringBuilder(512);
+                                SendMessage(childHwnd, WM_GETTEXT, (IntPtr)textSb2.Capacity, textSb2);
+                                text = textSb2.ToString();
+                            }
+
                             if (!string.IsNullOrWhiteSpace(text))
                             {
                                 childTexts.Add(text);
@@ -250,11 +264,20 @@ namespace CorelDrawAutoIgnoreError
 
             EnumChildWindows(hwnd, (childHwnd, lParam) =>
             {
+                // 方法1: GetWindowText
                 StringBuilder sb = new StringBuilder(512);
                 GetWindowText(childHwnd, sb, sb.Capacity);
                 string text = sb.ToString();
 
-                if (keywords.Any(keyword => text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
+                // 方法2: SendMessage WM_GETTEXT (对于某些静态文本控件更有效)
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    StringBuilder sb2 = new StringBuilder(512);
+                    SendMessage(childHwnd, WM_GETTEXT, (IntPtr)sb2.Capacity, sb2);
+                    text = sb2.ToString();
+                }
+
+                if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword => text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
                     found = true;
                     return false;
