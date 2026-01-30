@@ -160,13 +160,13 @@ namespace CorelDrawAutoIgnoreError
 
                         // 记录这个窗口的子控件文本(包括类名) - 递归收集
                         var allTexts = new System.Collections.Generic.List<string>();
-                        CollectAllTextsRecursive(hWnd, allTexts, 0, 5);
+                        CollectAllTextsRecursive(hWnd, allTexts, 0, 3); // 只递归3层
 
                         if (allTexts.Count > 0)
                         {
-                            // 去重并显示
-                            var uniqueTexts = allTexts.Distinct().ToList();
-                            LogDebug($"    所有文本(递归): {string.Join(", ", uniqueTexts)}");
+                            // 去重并显示(最多显示前20个)
+                            var uniqueTexts = allTexts.Distinct().Take(20).ToList();
+                            LogDebug($"    文本({allTexts.Count}个): {string.Join(", ", uniqueTexts)}");
                         }
                     }
                 }
@@ -243,7 +243,7 @@ namespace CorelDrawAutoIgnoreError
         private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
         {
             var allTexts = new System.Collections.Generic.List<string>();
-            CollectAllTextsRecursive(hwnd, allTexts, 0, 5); // 最多递归5层
+            CollectAllTextsRecursive(hwnd, allTexts, 0, 3); // 只递归3层,提高性能
 
             // 检查是否包含关键词
             foreach (var text in allTexts)
@@ -261,31 +261,42 @@ namespace CorelDrawAutoIgnoreError
         {
             if (depth >= maxDepth) return;
 
-            EnumChildWindows(hwnd, (childHwnd, lParam) =>
+            try
             {
-                // 方法1: GetWindowText
-                StringBuilder sb = new StringBuilder(512);
-                GetWindowText(childHwnd, sb, sb.Capacity);
-                string text = sb.ToString();
-
-                // 方法2: SendMessage WM_GETTEXT (对于某些静态文本控件更有效)
-                if (string.IsNullOrWhiteSpace(text))
+                EnumChildWindows(hwnd, (childHwnd, lParam) =>
                 {
-                    StringBuilder sb2 = new StringBuilder(512);
-                    SendMessage(childHwnd, WM_GETTEXT, (IntPtr)sb2.Capacity, sb2);
-                    text = sb2.ToString();
-                }
+                    try
+                    {
+                        // 方法1: GetWindowText
+                        StringBuilder sb = new StringBuilder(512);
+                        GetWindowText(childHwnd, sb, sb.Capacity);
+                        string text = sb.ToString();
 
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    texts.Add(text);
-                }
+                        // 方法2: SendMessage WM_GETTEXT (对于某些静态文本控件更有效)
+                        if (string.IsNullOrWhiteSpace(text))
+                        {
+                            StringBuilder sb2 = new StringBuilder(512);
+                            SendMessage(childHwnd, WM_GETTEXT, (IntPtr)sb2.Capacity, sb2);
+                            text = sb2.ToString();
+                        }
 
-                // 递归检查子控件的子控件
-                CollectAllTextsRecursive(childHwnd, texts, depth + 1, maxDepth);
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            texts.Add(text);
+                        }
 
-                return true;
-            }, IntPtr.Zero);
+                        // 递归检查子控件的子控件(仅前2层,避免性能问题)
+                        if (depth < 2)
+                        {
+                            CollectAllTextsRecursive(childHwnd, texts, depth + 1, maxDepth);
+                        }
+                    }
+                    catch { }
+
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch { }
         }
 
         private bool ClickButton(IntPtr dialogHwnd, string buttonText)
