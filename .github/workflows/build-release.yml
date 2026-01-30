@@ -17,6 +17,43 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # ===== 构建MinHook =====
+    - name: Cache MinHook
+      id: cache-minhook
+      uses: actions/cache@v3
+      with:
+        path: minhook
+        key: minhook-1.3.3
+
+    - name: Download and Build MinHook
+      if: steps.cache-minhook.outputs.cache-hit != 'true'
+      run: |
+        git clone https://github.com/TsudaKageyu/minhook.git
+        cd minhook
+        mkdir build
+        cd build
+        cmake .. -A x64
+        cmake --build . --config Release
+      shell: cmd
+
+    - name: Copy MinHook files
+      run: |
+        if not exist "GdiHook" mkdir GdiHook
+        copy minhook\include\MinHook.h GdiHook\
+        copy minhook\build\Release\libMinHook.x64.lib GdiHook\
+      shell: cmd
+
+    # ===== 构建GdiHook.dll =====
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Build GdiHook.dll
+      run: |
+        cd GdiHook
+        cl /LD /O2 /EHsc GdiHook.cpp /link /DLL /OUT:GdiHook.dll libMinHook.x64.lib gdi32.lib user32.lib
+      shell: cmd
+
+    # ===== 构建C#程序 =====
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
 
@@ -41,12 +78,16 @@ jobs:
         copy bin\Release\CorelDrawErrorMonitor.exe deploy\
         copy bin\Release\config.json deploy\
         copy bin\Release\Newtonsoft.Json.dll deploy\
+        copy GdiHook\GdiHook.dll deploy\
         copy START.bat deploy\
         echo # CorelDRAW Error Monitor > deploy\README.txt
         echo. >> deploy\README.txt
-        echo 1. Double-click START.bat >> deploy\README.txt
+        echo REQUIRES ADMINISTRATOR PRIVILEGES >> deploy\README.txt
+        echo. >> deploy\README.txt
+        echo 1. Right-click START.bat and select "Run as Administrator" >> deploy\README.txt
         echo 2. Check system tray for the icon >> deploy\README.txt
-        echo 3. Right-click icon to exit >> deploy\README.txt
+        echo 3. Open CorelDRAW with error files >> deploy\README.txt
+        echo 4. Errors will be auto-dismissed >> deploy\README.txt
         echo. >> deploy\README.txt
         echo Edit config.json to add more dialog rules. >> deploy\README.txt
       shell: cmd

@@ -20,6 +20,8 @@ namespace CorelDrawAutoIgnoreError
         private string _configPath;
         private string _logPath;
         private int _scanCount = 0;
+        private bool _dllInjected = false;
+        private GdiTextCapture _gdiCapture = null;
 
         // Windows API
         [DllImport("user32.dll")]
@@ -83,6 +85,10 @@ namespace CorelDrawAutoIgnoreError
 
             _isMonitoring = true;
             _cancellationTokenSource = new CancellationTokenSource();
+
+            // 尝试注入DLL到CorelDRAW
+            TryInjectHookDll();
+
             _monitorTask = Task.Run(() => MonitorLoop(_cancellationTokenSource.Token));
             LogDebug("监控已启动");
         }
@@ -103,10 +109,18 @@ namespace CorelDrawAutoIgnoreError
                 {
                     _scanCount++;
 
+                    // 每30秒检查一次CorelDRAW进程并尝试注入(如果之前未注入或进程重启)
+                    if (_scanCount % 300 == 0 && !_dllInjected)
+                    {
+                        LogDebug("[周期检查] 尝试注入GDI Hook DLL...");
+                        TryInjectHookDll();
+                    }
+
                     // 每10秒记录一次扫描状态
                     if (_scanCount % 100 == 0)
                     {
-                        LogDebug($"[扫描中] 已扫描 {_scanCount} 次，自动点击 {_autoClickCount} 次");
+                        string hookStatus = _dllInjected ? "已注入" : "未注入";
+                        LogDebug($"[扫描中] 已扫描 {_scanCount} 次，自动点击 {_autoClickCount} 次，GDI Hook: {hookStatus}");
                         LogAllVisibleWindows(); // 列出所有可见窗口
                     }
 
@@ -236,22 +250,46 @@ namespace CorelDrawAutoIgnoreError
 
         private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
         {
-            // 收集所有文本
+            // 方式1: 优先使用GDI Hook捕获的文本(精准匹配)
+            if (_gdiCapture != null)
+            {
+                try
+                {
+                    string gdiText = _gdiCapture.GetLatestText();
+                    if (!string.IsNullOrWhiteSpace(gdiText))
+                    {
+                        foreach (var keyword in keywords)
+                        {
+                            if (gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                LogDebug($"    [GDI文本匹配] 捕获到关键词'{keyword}': {gdiText.Substring(0, Math.Min(50, gdiText.Length))}...");
+                                return true;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogDebug($"    [GDI文本读取失败] {ex.Message}");
+                }
+            }
+
+            // 方式2: 收集窗口控件文本(兜底方案)
             var allTexts = new System.Collections.Generic.List<string>();
             CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
 
-            // 方式1: 检查是否包含关键词文本
             foreach (var text in allTexts)
             {
                 if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword =>
                     text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
                 {
+                    LogDebug($"    [控件文本匹配] 找到关键词: {text}");
                     return true;
                 }
             }
 
-            // 方式2: 对于"无效的轮廓"规则,检查特定的按钮组合
-            // 如果关键词包含"无效"并且窗口有"关于"、"重试"、"忽略"三个按钮,则认为匹配
+            // 方式3: 特征匹配(按钮组合,最后的兜底方案)
+            // 对于"无效的轮廓"规则,检查特定的按钮组合
             if (keywords.Any(k => k.Contains("无效")))
             {
                 bool hasAbout = allTexts.Any(t => t.Contains("关于"));
@@ -412,5 +450,59 @@ namespace CorelDrawAutoIgnoreError
         }
 
         public string GetLogPath() => _logPath;
+
+        private void TryInjectHookDll()
+        {
+            try
+            {
+                // 检测CorelDRAW进程
+                int pid = DllInjector.FindCorelDrawProcess();
+                if (pid > 0)
+                {
+                    LogDebug($"检测到CorelDRAW进程 (PID: {pid})");
+
+                    // 获取DLL路径
+                    string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GdiHook.dll");
+                    if (!File.Exists(dllPath))
+                    {
+                        LogDebug($"GdiHook.dll未找到: {dllPath}");
+                        return;
+                    }
+
+                    // 注入DLL
+                    if (DllInjector.InjectDll(pid, dllPath))
+                    {
+                        LogDebug("GDI Hook DLL注入成功");
+                        _dllInjected = true;
+
+                        // 等待Hook初始化
+                        Thread.Sleep(500);
+
+                        // 初始化共享内存读取
+                        _gdiCapture = new GdiTextCapture();
+                        if (_gdiCapture.Initialize())
+                        {
+                            LogDebug("共享内存连接成功");
+                        }
+                        else
+                        {
+                            LogDebug("共享内存连接失败");
+                        }
+                    }
+                    else
+                    {
+                        LogDebug("GDI Hook DLL注入失败");
+                    }
+                }
+                else
+                {
+                    LogDebug("未检测到CorelDRAW进程,将在检测到后自动注入");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug($"注入DLL时发生错误: {ex.Message}");
+            }
+        }
     }
 }
