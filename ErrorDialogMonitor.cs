@@ -116,12 +116,11 @@ namespace CorelDrawAutoIgnoreError
                         TryInjectHookDll();
                     }
 
-                    // 每10秒记录一次扫描状态
-                    if (_scanCount % 100 == 0)
+                    // 每60秒记录一次状态
+                    if (_scanCount % 600 == 0)
                     {
                         string hookStatus = _dllInjected ? "已注入" : "未注入";
-                        LogDebug($"[扫描中] 已扫描 {_scanCount} 次，自动点击 {_autoClickCount} 次，GDI Hook: {hookStatus}");
-                        LogAllVisibleWindows(); // 列出所有可见窗口
+                        LogDebug($"[状态] 已运行 {_scanCount/10} 秒，自动点击 {_autoClickCount} 次，GDI Hook: {hookStatus}");
                     }
 
                     foreach (var rule in _config.DialogRules)
@@ -131,7 +130,6 @@ namespace CorelDrawAutoIgnoreError
                         if (dialog != IntPtr.Zero && IsWindowVisible(dialog))
                         {
                             LogDebug($"✓✓✓ 发现匹配规则: {rule.Name}");
-                            LogWindowDetails(dialog);
 
                             if (ClickButton(dialog, rule.ButtonToClick))
                             {
@@ -142,6 +140,7 @@ namespace CorelDrawAutoIgnoreError
                             else
                             {
                                 LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}'");
+                                LogWindowDetails(dialog); // 只在找不到按钮时详细记录
                             }
                         }
                     }
@@ -154,165 +153,6 @@ namespace CorelDrawAutoIgnoreError
                     Thread.Sleep(1000);
                 }
             }
-        }
-
-        private void LogAllVisibleWindows()
-        {
-            LogDebug("--- 当前所有可见窗口 ---");
-
-            EnumWindows((hWnd, lParam) =>
-            {
-                if (IsWindowVisible(hWnd))
-                {
-                    StringBuilder titleSb = new StringBuilder(256);
-                    GetWindowText(hWnd, titleSb, titleSb.Capacity);
-                    string title = titleSb.ToString();
-
-                    if (!string.IsNullOrWhiteSpace(title))
-                    {
-                        LogDebug($"  窗口: [{title}]");
-
-                        // 记录这个窗口的完整子控件树
-                        LogDebug($"    === 开始详细扫描窗口子控件 ===");
-                        LogWindowChildrenRecursive(hWnd, 0, 3);
-                        LogDebug($"    === 扫描结束 ===");
-                    }
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            LogDebug("--- 列表结束 ---");
-        }
-
-        private void LogWindowDetails(IntPtr hwnd)
-        {
-            StringBuilder titleSb = new StringBuilder(256);
-            GetWindowText(hwnd, titleSb, titleSb.Capacity);
-            LogDebug($"  窗口标题: [{titleSb}]");
-
-            LogDebug("  子控件:");
-            EnumChildWindows(hwnd, (childHwnd, lParam) =>
-            {
-                StringBuilder textSb = new StringBuilder(512);
-                StringBuilder classSb = new StringBuilder(256);
-                GetWindowText(childHwnd, textSb, textSb.Capacity);
-                GetClassName(childHwnd, classSb, classSb.Capacity);
-
-                string text = textSb.ToString();
-                string className = classSb.ToString();
-
-                if (!string.IsNullOrWhiteSpace(text) || className.Contains("Button"))
-                {
-                    LogDebug($"    [{className}] \"{text}\"");
-                }
-                return true;
-            }, IntPtr.Zero);
-        }
-
-        private IntPtr FindDialog(DialogRule rule)
-        {
-            IntPtr result = IntPtr.Zero;
-            bool debugDetailed = _scanCount % 100 == 1; // 每10秒详细检查一次
-
-            EnumWindows((hWnd, lParam) =>
-            {
-                if (!IsWindowVisible(hWnd)) return true;
-
-                StringBuilder titleSb = new StringBuilder(256);
-                GetWindowText(hWnd, titleSb, titleSb.Capacity);
-                string title = titleSb.ToString();
-
-                if (string.IsNullOrWhiteSpace(title)) return true;
-
-                // 检查窗口标题
-                bool titleMatch = rule.WindowTitleContains.Any(keyword =>
-                    title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
-
-                // 检查窗口内容
-                bool contentMatch = ContainsContent(hWnd, rule.ContentContains);
-
-                // 详细调试:显示每个窗口的匹配情况
-                if (debugDetailed && (titleMatch || contentMatch))
-                {
-                    LogDebug($"[规则:{rule.Name}] 窗口[{title}] 标题匹配={titleMatch} 内容匹配={contentMatch}");
-                }
-
-                if (titleMatch && contentMatch)
-                {
-                    result = hWnd;
-                    return false;
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            return result;
-        }
-
-        private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
-        {
-            // 方式1: 优先使用GDI Hook捕获的文本(精准匹配)
-            if (_gdiCapture != null)
-            {
-                try
-                {
-                    string gdiText = _gdiCapture.GetLatestText();
-                    if (!string.IsNullOrWhiteSpace(gdiText))
-                    {
-                        foreach (var keyword in keywords)
-                        {
-                            if (gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                            {
-                                LogDebug($"    [GDI文本匹配] 捕获到关键词'{keyword}': {gdiText.Substring(0, Math.Min(50, gdiText.Length))}...");
-                                return true;
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    LogDebug($"    [GDI文本读取失败] {ex.Message}");
-                }
-            }
-
-            // 方式2: 收集窗口控件文本(兜底方案)
-            var allTexts = new System.Collections.Generic.List<string>();
-            CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
-
-            foreach (var text in allTexts)
-            {
-                if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword =>
-                    text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
-                {
-                    LogDebug($"    [控件文本匹配] 找到关键词: {text}");
-                    return true;
-                }
-            }
-
-            // 方式3: 特征匹配(按钮组合,最后的兜底方案)
-            // 对于"无效的轮廓"规则,检查特定的按钮组合
-            if (keywords.Any(k => k.Contains("无效")))
-            {
-                bool hasAbout = allTexts.Any(t => t.Contains("关于"));
-                bool hasRetry = allTexts.Any(t => t.Contains("重试"));
-                bool hasIgnore = allTexts.Any(t => t.Contains("忽略"));
-
-                if (hasAbout && hasRetry && hasIgnore)
-                {
-                    // 进一步检查窗口标题,确保不是主窗口
-                    StringBuilder titleSb = new StringBuilder(256);
-                    GetWindowText(hwnd, titleSb, titleSb.Capacity);
-                    string title = titleSb.ToString();
-
-                    // 错误对话框标题不包含" - "(主窗口有" - 文件路径")
-                    if (!title.Contains(" - "))
-                    {
-                        LogDebug($"    [特征匹配] 检测到错误对话框特征: 标题不含路径且有关于/重试/忽略按钮");
-                        return true;
-                    }
-                }
-            }
-
-            return false;
         }
 
         private void CollectAllTextsRecursive(IntPtr hwnd, System.Collections.Generic.List<string> texts, int depth, int maxDepth)
@@ -357,61 +197,29 @@ namespace CorelDrawAutoIgnoreError
             catch { }
         }
 
-        private void LogWindowChildrenRecursive(IntPtr hwnd, int depth, int maxDepth)
+        private void LogWindowDetails(IntPtr hwnd)
         {
-            if (depth >= maxDepth) return;
+            StringBuilder titleSb = new StringBuilder(256);
+            GetWindowText(hwnd, titleSb, titleSb.Capacity);
+            LogDebug($"  窗口标题: [{titleSb}]");
 
-            string indent = new string(' ', depth * 4);
-            int childCount = 0;
-
-            try
+            LogDebug("  可用按钮:");
+            EnumChildWindows(hwnd, (childHwnd, lParam) =>
             {
-                EnumChildWindows(hwnd, (childHwnd, lParam) =>
+                StringBuilder classSb = new StringBuilder(256);
+                GetClassName(childHwnd, classSb, classSb.Capacity);
+
+                if (classSb.ToString().Contains("Button"))
                 {
-                    try
+                    StringBuilder textSb = new StringBuilder(512);
+                    GetWindowText(childHwnd, textSb, textSb.Capacity);
+                    if (!string.IsNullOrWhiteSpace(textSb.ToString()))
                     {
-                        childCount++;
-
-                        // 获取类名
-                        StringBuilder classSb = new StringBuilder(256);
-                        GetClassName(childHwnd, classSb, classSb.Capacity);
-                        string className = classSb.ToString();
-
-                        // 获取文本 - 方法1
-                        StringBuilder textSb = new StringBuilder(512);
-                        GetWindowText(childHwnd, textSb, textSb.Capacity);
-                        string text = textSb.ToString();
-
-                        // 获取文本 - 方法2
-                        if (string.IsNullOrWhiteSpace(text))
-                        {
-                            StringBuilder textSb2 = new StringBuilder(512);
-                            SendMessage(childHwnd, WM_GETTEXT, (IntPtr)textSb2.Capacity, textSb2);
-                            text = textSb2.ToString();
-                        }
-
-                        // 是否可见
-                        bool visible = IsWindowVisible(childHwnd);
-
-                        // 显示控件信息
-                        string displayText = string.IsNullOrWhiteSpace(text) ? "(无文本)" : $"\"{text}\"";
-                        LogDebug($"{indent}[{childCount}] 类:{className}, 可见:{visible}, 文本:{displayText}");
-
-                        // 递归显示子控件
-                        if (depth < maxDepth - 1)
-                        {
-                            LogWindowChildrenRecursive(childHwnd, depth + 1, maxDepth);
-                        }
+                        LogDebug($"    - [{textSb}]");
                     }
-                    catch (Exception ex)
-                    {
-                        LogDebug($"{indent}[{childCount}] 错误: {ex.Message}");
-                    }
-
-                    return true;
-                }, IntPtr.Zero);
-            }
-            catch { }
+                }
+                return true;
+            }, IntPtr.Zero);
         }
 
         private bool ClickButton(IntPtr dialogHwnd, string buttonText)
