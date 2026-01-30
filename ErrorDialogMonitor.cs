@@ -158,23 +158,10 @@ namespace CorelDrawAutoIgnoreError
                     {
                         LogDebug($"  窗口: [{title}]");
 
-                        // 记录这个窗口的子控件文本(包括类名) - 递归收集
-                        var allTexts = new System.Collections.Generic.List<string>();
-                        CollectAllTextsRecursive(hWnd, allTexts, 0, 3); // 只递归3层
-
-                        if (allTexts.Count > 0)
-                        {
-                            // 去重
-                            var uniqueTexts = allTexts.Distinct().ToList();
-                            LogDebug($"    文本共{allTexts.Count}个,去重后{uniqueTexts.Count}个:");
-
-                            // 显示所有文本,每行最多10个
-                            for (int i = 0; i < uniqueTexts.Count; i += 10)
-                            {
-                                var batch = uniqueTexts.Skip(i).Take(10);
-                                LogDebug($"      {string.Join(", ", batch)}");
-                            }
-                        }
+                        // 记录这个窗口的完整子控件树
+                        LogDebug($"    === 开始详细扫描窗口子控件 ===");
+                        LogWindowChildrenRecursive(hWnd, 0, 3);
+                        LogDebug($"    === 扫描结束 ===");
                     }
                 }
                 return true;
@@ -299,6 +286,63 @@ namespace CorelDrawAutoIgnoreError
                         }
                     }
                     catch { }
+
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch { }
+        }
+
+        private void LogWindowChildrenRecursive(IntPtr hwnd, int depth, int maxDepth)
+        {
+            if (depth >= maxDepth) return;
+
+            string indent = new string(' ', depth * 4);
+            int childCount = 0;
+
+            try
+            {
+                EnumChildWindows(hwnd, (childHwnd, lParam) =>
+                {
+                    try
+                    {
+                        childCount++;
+
+                        // 获取类名
+                        StringBuilder classSb = new StringBuilder(256);
+                        GetClassName(childHwnd, classSb, classSb.Capacity);
+                        string className = classSb.ToString();
+
+                        // 获取文本 - 方法1
+                        StringBuilder textSb = new StringBuilder(512);
+                        GetWindowText(childHwnd, textSb, textSb.Capacity);
+                        string text = textSb.ToString();
+
+                        // 获取文本 - 方法2
+                        if (string.IsNullOrWhiteSpace(text))
+                        {
+                            StringBuilder textSb2 = new StringBuilder(512);
+                            SendMessage(childHwnd, WM_GETTEXT, (IntPtr)textSb2.Capacity, textSb2);
+                            text = textSb2.ToString();
+                        }
+
+                        // 是否可见
+                        bool visible = IsWindowVisible(childHwnd);
+
+                        // 显示控件信息
+                        string displayText = string.IsNullOrWhiteSpace(text) ? "(无文本)" : $"\"{text}\"";
+                        LogDebug($"{indent}[{childCount}] 类:{className}, 可见:{visible}, 文本:{displayText}");
+
+                        // 递归显示子控件
+                        if (depth < maxDepth - 1)
+                        {
+                            LogWindowChildrenRecursive(childHwnd, depth + 1, maxDepth);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDebug($"{indent}[{childCount}] 错误: {ex.Message}");
+                    }
 
                     return true;
                 }, IntPtr.Zero);
