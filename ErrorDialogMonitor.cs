@@ -197,6 +197,85 @@ namespace CorelDrawAutoIgnoreError
             catch { }
         }
 
+        private IntPtr FindDialog(DialogRule rule)
+        {
+            IntPtr result = IntPtr.Zero;
+
+            EnumWindows((hWnd, lParam) =>
+            {
+                if (!IsWindowVisible(hWnd)) return true;
+
+                StringBuilder titleSb = new StringBuilder(256);
+                GetWindowText(hWnd, titleSb, titleSb.Capacity);
+                string title = titleSb.ToString();
+
+                if (string.IsNullOrWhiteSpace(title)) return true;
+
+                // 检查窗口标题
+                bool titleMatch = rule.WindowTitleContains.Any(keyword =>
+                    title.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                if (!titleMatch) return true;
+
+                // 检查窗口内容
+                bool contentMatch = ContainsContent(hWnd, rule.ContentContains);
+
+                if (titleMatch && contentMatch)
+                {
+                    result = hWnd;
+                    return false;
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            return result;
+        }
+
+        private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
+        {
+            // 方式1: 优先使用GDI Hook捕获的文本(精准匹配)
+            if (_gdiCapture != null)
+            {
+                try
+                {
+                    string gdiText = _gdiCapture.GetLatestText();
+                    if (!string.IsNullOrWhiteSpace(gdiText))
+                    {
+                        // 检查是否所有关键词都在GDI文本中
+                        bool allMatch = keywords.All(keyword =>
+                            gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+
+                        if (allMatch)
+                        {
+                            LogDebug($"    [GDI匹配] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}...");
+                            return true;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    LogDebug($"    [GDI读取失败] {ex.Message}");
+                }
+            }
+
+            // 方式2: 收集窗口控件文本(兜底方案)
+            var allTexts = new System.Collections.Generic.List<string>();
+            CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
+
+            // 检查是否所有关键词都在控件文本中
+            bool allKeywordsFound = keywords.All(keyword =>
+                allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
+                    text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
+
+            if (allKeywordsFound)
+            {
+                LogDebug($"    [控件匹配] 找到所有关键词: {string.Join(", ", keywords)}");
+                return true;
+            }
+
+            return false;
+        }
+
         private void LogWindowDetails(IntPtr hwnd)
         {
             StringBuilder titleSb = new StringBuilder(256);
