@@ -103,6 +103,8 @@ namespace CorelDrawAutoIgnoreError
 
         private void MonitorLoop(CancellationToken cancellationToken)
         {
+            LogDebug("开始监控循环...");
+
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
@@ -121,6 +123,12 @@ namespace CorelDrawAutoIgnoreError
                     {
                         string hookStatus = _dllInjected ? "已注入" : "未注入";
                         LogDebug($"[状态] 已运行 {_scanCount/10} 秒，自动点击 {_autoClickCount} 次，GDI Hook: {hookStatus}");
+                    }
+
+                    // 前10次循环记录日志,帮助调试
+                    if (_scanCount <= 10)
+                    {
+                        LogDebug($"[扫描] 第 {_scanCount} 次扫描");
                     }
 
                     foreach (var rule in _config.DialogRules)
@@ -241,13 +249,13 @@ namespace CorelDrawAutoIgnoreError
                     string gdiText = _gdiCapture.GetLatestText();
                     if (!string.IsNullOrWhiteSpace(gdiText))
                     {
-                        // 检查是否所有关键词都在GDI文本中
-                        bool allMatch = keywords.All(keyword =>
+                        // 检查是否包含任一关键词
+                        bool anyMatch = keywords.Any(keyword =>
                             gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
 
-                        if (allMatch)
+                        if (anyMatch)
                         {
-                            LogDebug($"    [GDI匹配] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}...");
+                            LogDebug($"    [GDI匹配] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}");
                             return true;
                         }
                     }
@@ -262,15 +270,39 @@ namespace CorelDrawAutoIgnoreError
             var allTexts = new System.Collections.Generic.List<string>();
             CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
 
-            // 检查是否所有关键词都在控件文本中
-            bool allKeywordsFound = keywords.All(keyword =>
+            // 检查是否包含任一关键词
+            bool anyKeywordFound = keywords.Any(keyword =>
                 allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
                     text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
 
-            if (allKeywordsFound)
+            if (anyKeywordFound)
             {
-                LogDebug($"    [控件匹配] 找到所有关键词: {string.Join(", ", keywords)}");
+                string matchedKeyword = keywords.First(keyword =>
+                    allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
+                        text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
+                LogDebug($"    [控件匹配] 关键词: {matchedKeyword}");
                 return true;
+            }
+
+            // 方式3: 按钮组合特征匹配(最后的兜底方案,用于"无效的轮廓"错误)
+            if (keywords.Any(k => k.Contains("无效")))
+            {
+                bool hasAbout = allTexts.Any(t => t.Contains("关于"));
+                bool hasRetry = allTexts.Any(t => t.Contains("重试"));
+                bool hasIgnore = allTexts.Any(t => t.Contains("忽略"));
+
+                if (hasAbout && hasRetry && hasIgnore)
+                {
+                    StringBuilder titleSb = new StringBuilder(256);
+                    GetWindowText(hwnd, titleSb, titleSb.Capacity);
+                    string title = titleSb.ToString();
+
+                    if (!title.Contains(" - "))
+                    {
+                        LogDebug($"    [按钮特征匹配] 关于+重试+忽略");
+                        return true;
+                    }
+                }
             }
 
             return false;
