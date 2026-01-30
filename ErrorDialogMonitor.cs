@@ -50,6 +50,9 @@ namespace CorelDrawAutoIgnoreError
 
         private const uint BM_CLICK = 0x00F5;
         private const uint WM_GETTEXT = 0x000D;
+        private const uint WM_KEYDOWN = 0x0100;
+        private const uint WM_KEYUP = 0x0101;
+        private const int VK_RETURN = 0x0D;
 
         public ErrorDialogMonitor()
         {
@@ -147,8 +150,17 @@ namespace CorelDrawAutoIgnoreError
                             }
                             else
                             {
-                                LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}'");
-                                LogWindowDetails(dialog); // 只在找不到按钮时详细记录
+                                LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}',尝试发送回车键");
+                                LogWindowDetails(dialog);
+
+                                // 发送回车键到窗口
+                                SendMessage(dialog, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+                                Thread.Sleep(50);
+                                SendMessage(dialog, WM_KEYUP, (IntPtr)VK_RETURN, IntPtr.Zero);
+
+                                _autoClickCount++;
+                                LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
+                                Thread.Sleep(500);
                             }
                         }
                     }
