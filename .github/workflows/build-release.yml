@@ -38,15 +38,25 @@ jobs:
 
     - name: List MinHook build output
       run: |
-        echo Listing MinHook build directory:
-        dir /s /b minhook\build\Release
+        echo Listing entire MinHook build directory:
+        dir /s /b minhook\build
       shell: cmd
 
     - name: Copy MinHook files
       run: |
         if not exist "GdiHook" mkdir GdiHook
         copy minhook\include\MinHook.h GdiHook\
-        copy minhook\build\lib\Release\libMinHook-x64.lib GdiHook\
+        if exist "minhook\build\Release\libMinHook.x64.lib" (
+          copy minhook\build\Release\libMinHook.x64.lib GdiHook\libMinHook-x64.lib
+        ) else if exist "minhook\build\lib\Release\libMinHook-x64.lib" (
+          copy minhook\build\lib\Release\libMinHook-x64.lib GdiHook\
+        ) else if exist "minhook\build\bin\Release\libMinHook.x64.lib" (
+          copy minhook\build\bin\Release\libMinHook.x64.lib GdiHook\libMinHook-x64.lib
+        ) else (
+          echo ERROR: Cannot find MinHook library file
+          dir /s /b minhook\build\*.lib
+          exit /b 1
+        )
       shell: cmd
 
     # ===== 构建GdiHook.dll =====
