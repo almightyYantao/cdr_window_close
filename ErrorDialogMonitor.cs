@@ -158,10 +158,15 @@ namespace CorelDrawAutoIgnoreError
                     {
                         LogDebug($"  窗口: [{title}]");
 
-                        // 记录这个窗口的子控件文本
+                        // 记录这个窗口的子控件文本(包括类名)
                         var childTexts = new System.Collections.Generic.List<string>();
                         EnumChildWindows(hWnd, (childHwnd, childLParam) =>
                         {
+                            // 获取类名
+                            StringBuilder classSb = new StringBuilder(256);
+                            GetClassName(childHwnd, classSb, classSb.Capacity);
+                            string className = classSb.ToString();
+
                             // 方法1: GetWindowText
                             StringBuilder textSb = new StringBuilder(512);
                             GetWindowText(childHwnd, textSb, textSb.Capacity);
@@ -175,9 +180,15 @@ namespace CorelDrawAutoIgnoreError
                                 text = textSb2.ToString();
                             }
 
+                            // 显示类名和文本
                             if (!string.IsNullOrWhiteSpace(text))
                             {
-                                childTexts.Add(text);
+                                childTexts.Add($"[{className}] {text}");
+                            }
+                            else if (!string.IsNullOrWhiteSpace(className))
+                            {
+                                // 即使没有文本也显示类名,帮助调试
+                                childTexts.Add($"[{className}] (无文本)");
                             }
                             return true;
                         }, IntPtr.Zero);
