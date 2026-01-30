@@ -164,9 +164,16 @@ namespace CorelDrawAutoIgnoreError
 
                         if (allTexts.Count > 0)
                         {
-                            // 去重并显示(最多显示前20个)
-                            var uniqueTexts = allTexts.Distinct().Take(20).ToList();
-                            LogDebug($"    文本({allTexts.Count}个): {string.Join(", ", uniqueTexts)}");
+                            // 去重
+                            var uniqueTexts = allTexts.Distinct().ToList();
+                            LogDebug($"    文本共{allTexts.Count}个,去重后{uniqueTexts.Count}个:");
+
+                            // 显示所有文本,每行最多10个
+                            for (int i = 0; i < uniqueTexts.Count; i += 10)
+                            {
+                                var batch = uniqueTexts.Skip(i).Take(10);
+                                LogDebug($"      {string.Join(", ", batch)}");
+                            }
                         }
                     }
                 }

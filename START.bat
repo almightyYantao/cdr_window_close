@@ -34,10 +34,7 @@ echo.
 echo The program is now running in the system tray.
 echo Look near the clock to find the icon.
 echo.
-echo 程序已在系统托盘运行（时钟旁边）。
-echo.
 echo To exit: Right-click the tray icon - Exit
-echo 退出: 右键托盘图标 - 退出
 echo.
 echo ========================================
 echo.
