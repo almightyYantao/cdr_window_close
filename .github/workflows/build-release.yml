@@ -36,11 +36,17 @@ jobs:
         cmake --build . --config Release
       shell: cmd
 
+    - name: List MinHook build output
+      run: |
+        echo Listing MinHook build directory:
+        dir /s /b minhook\build\Release
+      shell: cmd
+
     - name: Copy MinHook files
       run: |
         if not exist "GdiHook" mkdir GdiHook
         copy minhook\include\MinHook.h GdiHook\
-        copy minhook\build\Release\libMinHook.x64.lib GdiHook\
+        copy minhook\build\lib\Release\libMinHook-x64.lib GdiHook\
       shell: cmd
 
     # ===== 构建GdiHook.dll =====
@@ -50,7 +56,7 @@ jobs:
     - name: Build GdiHook.dll
       run: |
         cd GdiHook
-        cl /LD /O2 /EHsc GdiHook.cpp /link /DLL /OUT:GdiHook.dll libMinHook.x64.lib gdi32.lib user32.lib
+        cl /LD /O2 /EHsc GdiHook.cpp /link /DLL /OUT:GdiHook.dll libMinHook-x64.lib gdi32.lib user32.lib
       shell: cmd
 
     # ===== 构建C#程序 =====
