@@ -47,6 +47,7 @@ jobs:
         if not exist "GdiHook" mkdir GdiHook
         copy minhook\include\MinHook.h GdiHook\
         copy minhook\build\Release\minhook.x64.lib GdiHook\
+        copy minhook\build\Release\minhook.x64.lib GdiHook\libMinHook.x64.lib
       shell: cmd
 
     # ===== 构建GdiHook.dll =====
