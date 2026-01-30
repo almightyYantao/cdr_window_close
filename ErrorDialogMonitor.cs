@@ -236,10 +236,11 @@ namespace CorelDrawAutoIgnoreError
 
         private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
         {
+            // 收集所有文本
             var allTexts = new System.Collections.Generic.List<string>();
-            CollectAllTextsRecursive(hwnd, allTexts, 0, 3); // 只递归3层,提高性能
+            CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
 
-            // 检查是否包含关键词
+            // 方式1: 检查是否包含关键词文本
             foreach (var text in allTexts)
             {
                 if (!string.IsNullOrWhiteSpace(text) && keywords.Any(keyword =>
@@ -248,6 +249,31 @@ namespace CorelDrawAutoIgnoreError
                     return true;
                 }
             }
+
+            // 方式2: 对于"无效的轮廓"规则,检查特定的按钮组合
+            // 如果关键词包含"无效"并且窗口有"关于"、"重试"、"忽略"三个按钮,则认为匹配
+            if (keywords.Any(k => k.Contains("无效")))
+            {
+                bool hasAbout = allTexts.Any(t => t.Contains("关于"));
+                bool hasRetry = allTexts.Any(t => t.Contains("重试"));
+                bool hasIgnore = allTexts.Any(t => t.Contains("忽略"));
+
+                if (hasAbout && hasRetry && hasIgnore)
+                {
+                    // 进一步检查窗口标题,确保不是主窗口
+                    StringBuilder titleSb = new StringBuilder(256);
+                    GetWindowText(hwnd, titleSb, titleSb.Capacity);
+                    string title = titleSb.ToString();
+
+                    // 错误对话框标题不包含" - "(主窗口有" - 文件路径")
+                    if (!title.Contains(" - "))
+                    {
+                        LogDebug($"    [特征匹配] 检测到错误对话框特征: 标题不含路径且有关于/重试/忽略按钮");
+                        return true;
+                    }
+                }
+            }
+
             return false;
         }
 
