@@ -38,12 +38,20 @@ namespace CorelDrawAutoIgnoreError
             hMapFile = OpenFileMapping(FILE_MAP_READ | FILE_MAP_WRITE, false, "Global\\CorelDrawGdiTextCapture");
             if (hMapFile == IntPtr.Zero)
             {
+                int error = Marshal.GetLastWin32Error();
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug.log"),
+                    $"[{DateTime.Now:HH:mm:ss}] 共享内存打开失败, 错误代码: {error}\n");
                 return false;
             }
 
             pBuf = MapViewOfFile(hMapFile, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 8192);
             if (pBuf == IntPtr.Zero)
             {
+                int error = Marshal.GetLastWin32Error();
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug.log"),
+                    $"[{DateTime.Now:HH:mm:ss}] 共享内存映射失败, 错误代码: {error}\n");
                 CloseHandle(hMapFile);
                 hMapFile = IntPtr.Zero;
                 return false;

@@ -119,10 +119,19 @@ BOOL InitializeHook() {
     g_logFile.open(logPath, std::ios::app);
     g_logFile << L"\n=== Hook Initialized ===\n";
 
+    // 创建安全描述符，允许所有用户访问（解决权限问题）
+    SECURITY_ATTRIBUTES sa;
+    SECURITY_DESCRIPTOR sd;
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);  // NULL DACL = 所有人都可以访问
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.lpSecurityDescriptor = &sd;
+    sa.bInheritHandle = FALSE;
+
     // 创建共享内存
     g_hSharedMem = CreateFileMappingW(
         INVALID_HANDLE_VALUE,
-        NULL,
+        &sa,  // 使用安全描述符
         PAGE_READWRITE,
         0,
         SHARED_MEM_SIZE,
@@ -130,9 +139,11 @@ BOOL InitializeHook() {
     );
 
     if (g_hSharedMem == NULL) {
-        g_logFile << L"Failed to create shared memory\n";
+        g_logFile << L"Failed to create shared memory, error: " << GetLastError() << L"\n";
         return FALSE;
     }
+
+    g_logFile << L"Shared memory created successfully\n";
 
     g_pSharedData = (SharedTextData*)MapViewOfFile(
         g_hSharedMem,

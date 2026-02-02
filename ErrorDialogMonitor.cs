@@ -490,18 +490,31 @@ namespace CorelDrawAutoIgnoreError
                         LogDebug("GDI Hook DLL注入成功");
                         _dllInjected = true;
 
-                        // 等待Hook初始化
-                        Thread.Sleep(500);
+                        // 等待Hook初始化并创建共享内存
+                        Thread.Sleep(1000);
 
-                        // 初始化共享内存读取
+                        // 初始化共享内存读取（重试最多3次）
                         _gdiCapture = new GdiTextCapture();
-                        if (_gdiCapture.Initialize())
+                        bool connected = false;
+                        for (int i = 0; i < 3; i++)
                         {
-                            LogDebug("共享内存连接成功");
+                            if (_gdiCapture.Initialize())
+                            {
+                                LogDebug($"共享内存连接成功 (第{i+1}次尝试)");
+                                connected = true;
+                                break;
+                            }
+                            else
+                            {
+                                LogDebug($"共享内存连接失败 (第{i+1}次尝试), 等待后重试...");
+                                Thread.Sleep(500);
+                            }
                         }
-                        else
+
+                        if (!connected)
                         {
-                            LogDebug("共享内存连接失败");
+                            LogDebug("共享内存连接失败，GDI文本捕获将不可用");
+                            LogDebug("可能原因: 权限问题或Hook初始化失败");
                         }
                     }
                     else
