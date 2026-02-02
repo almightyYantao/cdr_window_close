@@ -57,7 +57,7 @@ jobs:
     - name: Build GdiHook.dll
       run: |
         cd GdiHook
-        cl /LD /O2 /EHsc GdiHook.cpp /link /DLL /OUT:GdiHook.dll minhook.x64.lib gdi32.lib user32.lib
+        cl /LD /O2 /EHsc GdiHook.cpp /link /DLL /OUT:GdiHook.dll minhook.x64.lib gdi32.lib user32.lib Advapi32.lib
       shell: cmd
 
     # ===== 构建C#程序 =====
