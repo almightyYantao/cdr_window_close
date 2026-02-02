@@ -76,6 +76,10 @@ void WriteToSharedMemory(LPCWSTR text, int length) {
 // Hook: TextOutW
 BOOL WINAPI Hook_TextOutW(HDC hdc, int x, int y, LPCWSTR lpString, int c) {
     if (lpString && c > 0) {
+        if (g_logFile.is_open()) {
+            g_logFile << L"[Hook_TextOutW调用] " << lpString << L"\n";
+            g_logFile.flush();
+        }
         WriteToSharedMemory(lpString, c);
     }
     return Original_TextOutW(hdc, x, y, lpString, c);
@@ -84,6 +88,10 @@ BOOL WINAPI Hook_TextOutW(HDC hdc, int x, int y, LPCWSTR lpString, int c) {
 // Hook: ExtTextOutW
 BOOL WINAPI Hook_ExtTextOutW(HDC hdc, int x, int y, UINT options, CONST RECT* lprect, LPCWSTR lpString, UINT c, CONST INT* lpDx) {
     if (lpString && c > 0) {
+        if (g_logFile.is_open()) {
+            g_logFile << L"[Hook_ExtTextOutW调用] " << lpString << L"\n";
+            g_logFile.flush();
+        }
         WriteToSharedMemory(lpString, c);
     }
     return Original_ExtTextOutW(hdc, x, y, options, lprect, lpString, c, lpDx);
@@ -93,6 +101,10 @@ BOOL WINAPI Hook_ExtTextOutW(HDC hdc, int x, int y, UINT options, CONST RECT* lp
 int WINAPI Hook_DrawTextW(HDC hdc, LPCWSTR lpchText, int cchText, LPRECT lprc, UINT format) {
     if (lpchText) {
         int len = (cchText == -1) ? wcslen(lpchText) : cchText;
+        if (g_logFile.is_open()) {
+            g_logFile << L"[Hook_DrawTextW调用] " << lpchText << L"\n";
+            g_logFile.flush();
+        }
         WriteToSharedMemory(lpchText, len);
     }
     return Original_DrawTextW(hdc, lpchText, cchText, lprc, format);
@@ -133,6 +145,12 @@ BOOL InitializeHook() {
         g_logFile << L"Failed to map shared memory\n";
         return FALSE;
     }
+
+    // 初始化共享内存为空
+    ZeroMemory(g_pSharedData, sizeof(SharedTextData));
+    g_pSharedData->latestText[0] = L'\0';
+    g_pSharedData->processId = GetCurrentProcessId();
+    g_pSharedData->timestamp = 0;
 
     // 初始化MinHook
     if (MH_Initialize() != MH_OK) {
