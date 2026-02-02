@@ -45,6 +45,12 @@ namespace CorelDrawAutoIgnoreError
         [DllImport("user32.dll")]
         private static extern IntPtr GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
+        [DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
@@ -53,6 +59,7 @@ namespace CorelDrawAutoIgnoreError
         private const uint WM_KEYDOWN = 0x0100;
         private const uint WM_KEYUP = 0x0101;
         private const int VK_RETURN = 0x0D;
+        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         public ErrorDialogMonitor()
         {
@@ -153,10 +160,14 @@ namespace CorelDrawAutoIgnoreError
                                 LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}',尝试发送回车键");
                                 LogWindowDetails(dialog);
 
-                                // 发送回车键到窗口
-                                SendMessage(dialog, WM_KEYDOWN, (IntPtr)VK_RETURN, IntPtr.Zero);
+                                // 先激活窗口
+                                SetForegroundWindow(dialog);
+                                Thread.Sleep(100);
+
+                                // 使用 keybd_event 模拟全局键盘输入
+                                keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);  // 按下回车
                                 Thread.Sleep(50);
-                                SendMessage(dialog, WM_KEYUP, (IntPtr)VK_RETURN, IntPtr.Zero);
+                                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);  // 释放回车
 
                                 _autoClickCount++;
                                 LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
@@ -296,8 +307,9 @@ namespace CorelDrawAutoIgnoreError
                 return true;
             }
 
-            // 方式3: 按钮组合特征匹配(最后的兜底方案,用于"无效的轮廓"错误)
-            if (keywords.Any(k => k.Contains("无效")))
+            // 方式3: 按钮组合特征匹配(最后的兜底方案,仅用于"无效的轮廓"错误)
+            // 只对包含"无效的轮廓"的规则启用,避免误匹配其他包含"无效"的规则
+            if (keywords.Contains("无效的轮廓"))
             {
                 bool hasAbout = allTexts.Any(t => t.Contains("关于"));
                 bool hasRetry = allTexts.Any(t => t.Contains("重试"));
