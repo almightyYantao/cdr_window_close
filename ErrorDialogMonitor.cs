@@ -173,6 +173,13 @@ namespace CorelDrawAutoIgnoreError
                                 LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
                                 Thread.Sleep(500);
                             }
+
+                            // 处理完对话框后清空GDI文本缓冲区，避免影响下一个对话框的判断
+                            if (_gdiCapture != null)
+                            {
+                                _gdiCapture.ClearText();
+                                LogDebug($"  [GDI缓冲区已清空]");
+                            }
                         }
                     }
 

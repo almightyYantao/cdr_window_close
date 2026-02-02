@@ -19,6 +19,7 @@ namespace CorelDrawAutoIgnoreError
         static extern bool CloseHandle(IntPtr hObject);
 
         const uint FILE_MAP_READ = 0x0004;
+        const uint FILE_MAP_WRITE = 0x0002;
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         struct SharedTextData
@@ -34,13 +35,13 @@ namespace CorelDrawAutoIgnoreError
 
         public bool Initialize()
         {
-            hMapFile = OpenFileMapping(FILE_MAP_READ, false, "Global\\CorelDrawGdiTextCapture");
+            hMapFile = OpenFileMapping(FILE_MAP_READ | FILE_MAP_WRITE, false, "Global\\CorelDrawGdiTextCapture");
             if (hMapFile == IntPtr.Zero)
             {
                 return false;
             }
 
-            pBuf = MapViewOfFile(hMapFile, FILE_MAP_READ, 0, 0, 8192);
+            pBuf = MapViewOfFile(hMapFile, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0, 8192);
             if (pBuf == IntPtr.Zero)
             {
                 CloseHandle(hMapFile);
@@ -58,12 +59,34 @@ namespace CorelDrawAutoIgnoreError
             try
             {
                 SharedTextData data = Marshal.PtrToStructure<SharedTextData>(pBuf);
+
+                // 调试：记录共享内存中的所有信息
+                System.IO.File.AppendAllText(
+                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "debug.log"),
+                    $"[{DateTime.Now:HH:mm:ss}]     [GDI共享内存] Text=[{data.latestText}], PID={data.processId}, Time={data.timestamp}\n");
+
                 return data.latestText;
             }
             catch
             {
                 return null;
             }
+        }
+
+        // 清空共享内存中的文本（用于处理完一个对话框后）
+        public void ClearText()
+        {
+            if (pBuf == IntPtr.Zero) return;
+
+            try
+            {
+                SharedTextData data = new SharedTextData();
+                data.latestText = "";
+                data.processId = 0;
+                data.timestamp = 0;
+                Marshal.StructureToPtr(data, pBuf, false);
+            }
+            catch { }
         }
 
         public void Cleanup()

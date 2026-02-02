@@ -32,23 +32,44 @@ PFN_TextOutW Original_TextOutW = NULL;
 PFN_ExtTextOutW Original_ExtTextOutW = NULL;
 PFN_DrawTextW Original_DrawTextW = NULL;
 
-// 写入共享内存
+// 写入共享内存 - 累积文本而不是覆盖
 void WriteToSharedMemory(LPCWSTR text, int length) {
     if (!g_pSharedData || !text) return;
 
     // 限制长度
-    int copyLen = min(length, 3999);
-    if (copyLen > 0) {
+    int copyLen = min(length, 200);  // 每段最多200字符
+    if (copyLen <= 0) return;
+
+    // 获取当前已有文本的长度
+    int currentLen = wcslen(g_pSharedData->latestText);
+    int remainingSpace = 3999 - currentLen;
+
+    // 如果空间足够，追加新文本（用空格分隔）
+    if (remainingSpace > copyLen + 1) {
+        // 如果已有内容，添加分隔符
+        if (currentLen > 0) {
+            wcscat_s(g_pSharedData->latestText, 4000, L" ");
+            currentLen++;
+            remainingSpace--;
+        }
+
+        // 追加新文本
+        wcsncat_s(g_pSharedData->latestText, 4000, text, copyLen);
+        g_pSharedData->processId = GetCurrentProcessId();
+        g_pSharedData->timestamp = GetTickCount();
+    }
+    // 如果缓冲区快满了，清空并重新开始（避免丢失重要文本）
+    else if (currentLen > 3500) {
         wcsncpy_s(g_pSharedData->latestText, 4000, text, copyLen);
         g_pSharedData->latestText[copyLen] = L'\0';
         g_pSharedData->processId = GetCurrentProcessId();
         g_pSharedData->timestamp = GetTickCount();
+    }
 
-        // 同时写入日志文件用于调试
-        if (g_logFile.is_open()) {
-            g_logFile << L"[TextOut] " << text << L"\n";
-            g_logFile.flush();
-        }
+    // 同时写入日志文件用于调试
+    if (g_logFile.is_open()) {
+        g_logFile << L"[TextOut] " << text << L"\n";
+        g_logFile.flush();
     }
 }
 
