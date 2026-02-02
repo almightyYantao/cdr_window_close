@@ -248,6 +248,8 @@ namespace CorelDrawAutoIgnoreError
 
                 if (!titleMatch) return true;
 
+                LogDebug($"  [规则:{rule.Name}] 标题匹配成功: [{title}]");
+
                 // 检查窗口内容
                 bool contentMatch = ContainsContent(hWnd, rule.ContentContains);
 
@@ -264,6 +266,8 @@ namespace CorelDrawAutoIgnoreError
 
         private bool ContainsContent(IntPtr hwnd, System.Collections.Generic.List<string> keywords)
         {
+            LogDebug($"  [内容匹配] 开始检查关键词: [{string.Join(", ", keywords)}]");
+
             // 方式1: 优先使用GDI Hook捕获的文本(精准匹配)
             if (_gdiCapture != null)
             {
@@ -272,15 +276,25 @@ namespace CorelDrawAutoIgnoreError
                     string gdiText = _gdiCapture.GetLatestText();
                     if (!string.IsNullOrWhiteSpace(gdiText))
                     {
+                        LogDebug($"    [GDI文本] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}...");
+
                         // 检查是否包含任一关键词
                         bool anyMatch = keywords.Any(keyword =>
                             gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
 
                         if (anyMatch)
                         {
-                            LogDebug($"    [GDI匹配] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}");
+                            LogDebug($"    ✓ [GDI匹配成功]");
                             return true;
                         }
+                        else
+                        {
+                            LogDebug($"    ✗ [GDI未匹配]");
+                        }
+                    }
+                    else
+                    {
+                        LogDebug($"    [GDI文本为空]");
                     }
                 }
                 catch (Exception ex)
@@ -288,10 +302,23 @@ namespace CorelDrawAutoIgnoreError
                     LogDebug($"    [GDI读取失败] {ex.Message}");
                 }
             }
+            else
+            {
+                LogDebug($"    [GDI未初始化]");
+            }
 
             // 方式2: 收集窗口控件文本(兜底方案)
             var allTexts = new System.Collections.Generic.List<string>();
             CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
+
+            if (allTexts.Count > 0)
+            {
+                LogDebug($"    [控件文本] 共收集到 {allTexts.Count} 个文本: [{string.Join(", ", allTexts.Take(5))}...]");
+            }
+            else
+            {
+                LogDebug($"    [控件文本] 未收集到任何文本");
+            }
 
             // 检查是否包含任一关键词
             bool anyKeywordFound = keywords.Any(keyword =>
@@ -303,17 +330,24 @@ namespace CorelDrawAutoIgnoreError
                 string matchedKeyword = keywords.First(keyword =>
                     allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
                         text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
-                LogDebug($"    [控件匹配] 关键词: {matchedKeyword}");
+                LogDebug($"    ✓ [控件匹配成功] 关键词: {matchedKeyword}");
                 return true;
+            }
+            else
+            {
+                LogDebug($"    ✗ [控件未匹配]");
             }
 
             // 方式3: 按钮组合特征匹配(最后的兜底方案,仅用于"无效的轮廓"错误)
             // 只对包含"无效的轮廓"的规则启用,避免误匹配其他包含"无效"的规则
             if (keywords.Contains("无效的轮廓"))
             {
+                LogDebug($"    [按钮特征] 检查按钮组合...");
                 bool hasAbout = allTexts.Any(t => t.Contains("关于"));
                 bool hasRetry = allTexts.Any(t => t.Contains("重试"));
                 bool hasIgnore = allTexts.Any(t => t.Contains("忽略"));
+
+                LogDebug($"      关于:{hasAbout}, 重试:{hasRetry}, 忽略:{hasIgnore}");
 
                 if (hasAbout && hasRetry && hasIgnore)
                 {
@@ -321,14 +355,25 @@ namespace CorelDrawAutoIgnoreError
                     GetWindowText(hwnd, titleSb, titleSb.Capacity);
                     string title = titleSb.ToString();
 
+                    LogDebug($"      窗口标题检查: [{title}], 包含' - ':{title.Contains(" - ")}");
+
                     if (!title.Contains(" - "))
                     {
-                        LogDebug($"    [按钮特征匹配] 关于+重试+忽略");
+                        LogDebug($"    ✓ [按钮特征匹配成功] 关于+重试+忽略");
                         return true;
                     }
+                    else
+                    {
+                        LogDebug($"    ✗ [按钮特征失败] 标题包含' - '");
+                    }
+                }
+                else
+                {
+                    LogDebug($"    ✗ [按钮特征失败] 按钮组合不满足");
                 }
             }
 
+            LogDebug($"  ✗ [内容匹配失败] 所有匹配方式都失败");
             return false;
         }
 
@@ -360,26 +405,46 @@ namespace CorelDrawAutoIgnoreError
         private bool ClickButton(IntPtr dialogHwnd, string buttonText)
         {
             bool clicked = false;
+            int buttonCount = 0;
+
+            LogDebug($"  [查找按钮] 目标按钮文本: [{buttonText}]");
 
             EnumChildWindows(dialogHwnd, (childHwnd, lParam) =>
             {
-                StringBuilder sb = new StringBuilder(256);
-                GetWindowText(childHwnd, sb, sb.Capacity);
-                string text = sb.ToString();
+                StringBuilder classSb = new StringBuilder(256);
+                GetClassName(childHwnd, classSb, classSb.Capacity);
 
-                // 更宽松的匹配
-                if (!string.IsNullOrWhiteSpace(text) &&
-                    (text.Equals(buttonText, StringComparison.OrdinalIgnoreCase) ||
-                     text.IndexOf(buttonText, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                     buttonText.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0))
+                // 只处理按钮类型的控件
+                if (classSb.ToString().Contains("Button"))
                 {
-                    LogDebug($"    找到按钮: \"{text}\" (匹配 \"{buttonText}\")");
-                    SendMessage(childHwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
-                    clicked = true;
-                    return false;
+                    buttonCount++;
+                    StringBuilder sb = new StringBuilder(256);
+                    GetWindowText(childHwnd, sb, sb.Capacity);
+                    string text = sb.ToString();
+
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        LogDebug($"    发现按钮 #{buttonCount}: [{text}]");
+
+                        // 更宽松的匹配
+                        if (text.Equals(buttonText, StringComparison.OrdinalIgnoreCase) ||
+                            text.IndexOf(buttonText, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            buttonText.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            LogDebug($"    ✓ 按钮匹配成功,准备点击: [{text}]");
+                            SendMessage(childHwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+                            clicked = true;
+                            return false;
+                        }
+                    }
                 }
                 return true;
             }, IntPtr.Zero);
+
+            if (!clicked)
+            {
+                LogDebug($"  ✗ [查找按钮失败] 共检查了 {buttonCount} 个按钮,未找到匹配的按钮");
+            }
 
             return clicked;
         }
