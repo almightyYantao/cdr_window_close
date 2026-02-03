@@ -108,7 +108,7 @@ namespace CorelDrawAutoIgnoreError
 
         private void MonitorLoop(CancellationToken cancellationToken)
         {
-            LogDebug("开始监控循环...");
+            LogDebug("监控已启动 - 扫描间隔: " + _config.Settings.CheckInterval + "ms");
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -116,10 +116,10 @@ namespace CorelDrawAutoIgnoreError
                 {
                     _scanCount++;
 
-                    // 每60秒记录一次状态
+                    // 每5分钟记录一次状态（减少日志输出）
                     if (_scanCount % 600 == 0)
                     {
-                        LogDebug($"[状态] 已运行 {_scanCount/10} 秒，自动点击 {_autoClickCount} 次");
+                        LogDebug($"[状态] 已自动点击 {_autoClickCount} 次");
                     }
 
                     foreach (var rule in _config.DialogRules)
@@ -154,6 +154,9 @@ namespace CorelDrawAutoIgnoreError
                                 LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
                                 Thread.Sleep(500);
                             }
+
+                            // 找到并处理一个对话框后，跳出循环，避免重复处理
+                            break;
                         }
                     }
 
@@ -194,6 +197,7 @@ namespace CorelDrawAutoIgnoreError
                     return true;
                 }
 
+                // 只在标题匹配时才输出日志和检查内容
                 LogDebug($"  [规则:{rule.Name}] 标题匹配成功: [{title}]");
 
                 // 检查窗口内容
@@ -202,7 +206,7 @@ namespace CorelDrawAutoIgnoreError
                 if (titleMatch && contentMatch)
                 {
                     result = hWnd;
-                    return false;
+                    return false; // 找到匹配窗口，立即停止枚举
                 }
                 return true;
             }, IntPtr.Zero);

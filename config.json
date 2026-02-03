@@ -20,7 +20,7 @@
     }
   ],
   "settings": {
-    "checkInterval": 100,
+    "checkInterval": 500,
     "showNotifications": false
   }
 }
