@@ -17,6 +17,12 @@
       "windowTitleContains": ["CorelDRAW"],
       "contentContains": [],
       "buttonToClick": "OK"
+    },
+    {
+      "name": "EPS导入对话框",
+      "windowTitleContains": ["导入"],
+      "contentContains": [],
+      "buttonToClick": "OK"
     }
   ],
   "settings": {
