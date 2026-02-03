@@ -77,7 +77,8 @@ namespace CorelDrawButtonDetector
                 // 只关注CorelDRAW相关窗口
                 if (title.Contains("CorelDRAW"))
                 {
-                    GetWindowThreadProcessId(hWnd, out uint processId);
+                    uint processId;
+                    GetWindowThreadProcessId(hWnd, out processId);
 
                     Log("\n【窗口】 " + title);
                     Log("  进程ID: " + processId);
