@@ -74,18 +74,15 @@ namespace CorelDrawButtonDetector
 
                 if (string.IsNullOrWhiteSpace(title)) return true;
 
-                // 只关注CorelDRAW相关窗口
-                if (title.Contains("CorelDRAW"))
-                {
-                    uint processId;
-                    GetWindowThreadProcessId(hWnd, out processId);
+                // 扫描所有窗口，不仅限于 CorelDRAW
+                uint processId;
+                GetWindowThreadProcessId(hWnd, out processId);
 
-                    Log("\n【窗口】 " + title);
-                    Log("  进程ID: " + processId);
-                    Log("  句柄: 0x" + hWnd.ToInt64().ToString("X") + "\n");
+                Log("\n【窗口】 " + title);
+                Log("  进程ID: " + processId);
+                Log("  句柄: 0x" + hWnd.ToInt64().ToString("X") + "\n");
 
-                    ScanWindowControls(hWnd);
-                }
+                ScanWindowControls(hWnd);
 
                 return true;
             }, IntPtr.Zero);
