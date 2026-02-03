@@ -43,10 +43,10 @@ namespace CorelDrawButtonDetector
         static void Main(string[] args)
         {
             logPath = Path.Combine(Environment.CurrentDirectory, "button_detection.log");
-            File.WriteAllText(logPath, $"=== CorelDRAW 按钮检测日志 {DateTime.Now} ===\n\n");
+            File.WriteAllText(logPath, "=== CorelDRAW 按钮检测日志 " + DateTime.Now + " ===\n\n");
 
             Console.WriteLine("=== CorelDRAW 按钮检测工具 ===");
-            Console.WriteLine($"日志文件: {logPath}");
+            Console.WriteLine("日志文件: " + logPath);
             Console.WriteLine("\n请确保CorelDRAW已打开并有错误对话框");
             Console.WriteLine("\n按任意键开始扫描...");
             Console.ReadKey();
@@ -55,7 +55,7 @@ namespace CorelDrawButtonDetector
             ScanAllWindows();
 
             Console.WriteLine("\n扫描完成！");
-            Console.WriteLine($"详细信息请查看: {logPath}");
+            Console.WriteLine("详细信息请查看: " + logPath);
             Console.WriteLine("\n按任意键退出...");
             Console.ReadKey();
         }
@@ -79,9 +79,9 @@ namespace CorelDrawButtonDetector
                 {
                     GetWindowThreadProcessId(hWnd, out uint processId);
 
-                    Log($"\n【窗口】 {title}");
-                    Log($"  进程ID: {processId}");
-                    Log($"  句柄: 0x{hWnd.ToInt64():X}\n");
+                    Log("\n【窗口】 " + title);
+                    Log("  进程ID: " + processId);
+                    Log("  句柄: 0x" + hWnd.ToInt64().ToString("X") + "\n");
 
                     ScanWindowControls(hWnd);
                 }
@@ -124,28 +124,28 @@ namespace CorelDrawButtonDetector
                     {
                         buttonCount++;
                         buttonList.Add(displayText);
-                        Log($"  ✓ 按钮 #{buttonCount}: [{displayText}]");
-                        Log($"      类名: {className}");
-                        Log($"      句柄: 0x{childHwnd.ToInt64():X}");
+                        Log("  ✓ 按钮 #" + buttonCount + ": [" + displayText + "]");
+                        Log("      类名: " + className);
+                        Log("      句柄: 0x" + childHwnd.ToInt64().ToString("X"));
                     }
                     else if (className.Contains("Static") || className.Contains("Edit"))
                     {
-                        Log($"  ○ 文本控件: [{displayText}]");
-                        Log($"      类名: {className}");
+                        Log("  ○ 文本控件: [" + displayText + "]");
+                        Log("      类名: " + className);
                     }
                 }
 
                 return true;
             }, IntPtr.Zero);
 
-            Log($"\n  【统计】共 {controlCount} 个控件，其中 {buttonCount} 个按钮");
+            Log("\n  【统计】共 " + controlCount + " 个控件，其中 " + buttonCount + " 个按钮");
 
             if (buttonCount > 0)
             {
-                Console.WriteLine($"\n  发现 {buttonCount} 个按钮:");
+                Console.WriteLine("\n  发现 " + buttonCount + " 个按钮:");
                 foreach (var btn in buttonList)
                 {
-                    Console.WriteLine($"    - {btn}");
+                    Console.WriteLine("    - " + btn);
                 }
             }
 
