@@ -20,8 +20,6 @@ namespace CorelDrawAutoIgnoreError
         private string _configPath;
         private string _logPath;
         private int _scanCount = 0;
-        private bool _dllInjected = false;
-        private GdiTextCapture _gdiCapture = null;
 
         // Windows API
         [DllImport("user32.dll")]
@@ -96,9 +94,6 @@ namespace CorelDrawAutoIgnoreError
             _isMonitoring = true;
             _cancellationTokenSource = new CancellationTokenSource();
 
-            // 尝试注入DLL到CorelDRAW
-            TryInjectHookDll();
-
             _monitorTask = Task.Run(() => MonitorLoop(_cancellationTokenSource.Token));
             LogDebug("监控已启动");
         }
@@ -121,24 +116,10 @@ namespace CorelDrawAutoIgnoreError
                 {
                     _scanCount++;
 
-                    // 每30秒检查一次CorelDRAW进程并尝试注入(如果之前未注入或进程重启)
-                    if (_scanCount % 300 == 0 && !_dllInjected)
-                    {
-                        LogDebug("[周期检查] 尝试注入GDI Hook DLL...");
-                        TryInjectHookDll();
-                    }
-
                     // 每60秒记录一次状态
                     if (_scanCount % 600 == 0)
                     {
-                        string hookStatus = _dllInjected ? "已注入" : "未注入";
-                        LogDebug($"[状态] 已运行 {_scanCount/10} 秒，自动点击 {_autoClickCount} 次，GDI Hook: {hookStatus}");
-                    }
-
-                    // 前10次循环记录日志,帮助调试
-                    if (_scanCount <= 10)
-                    {
-                        LogDebug($"[扫描] 第 {_scanCount} 次扫描");
+                        LogDebug($"[状态] 已运行 {_scanCount/10} 秒，自动点击 {_autoClickCount} 次");
                     }
 
                     foreach (var rule in _config.DialogRules)
@@ -173,13 +154,6 @@ namespace CorelDrawAutoIgnoreError
                                 LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
                                 Thread.Sleep(500);
                             }
-
-                            // 处理完对话框后清空GDI文本缓冲区，避免影响下一个对话框的判断
-                            if (_gdiCapture != null)
-                            {
-                                _gdiCapture.ClearText();
-                                LogDebug($"  [GDI缓冲区已清空]");
-                            }
                         }
                     }
 
@@ -191,48 +165,6 @@ namespace CorelDrawAutoIgnoreError
                     Thread.Sleep(1000);
                 }
             }
-        }
-
-        private void CollectAllTextsRecursive(IntPtr hwnd, System.Collections.Generic.List<string> texts, int depth, int maxDepth)
-        {
-            if (depth >= maxDepth) return;
-
-            try
-            {
-                EnumChildWindows(hwnd, (childHwnd, lParam) =>
-                {
-                    try
-                    {
-                        // 方法1: GetWindowText
-                        StringBuilder sb = new StringBuilder(512);
-                        GetWindowText(childHwnd, sb, sb.Capacity);
-                        string text = sb.ToString();
-
-                        // 方法2: SendMessage WM_GETTEXT (对于某些静态文本控件更有效)
-                        if (string.IsNullOrWhiteSpace(text))
-                        {
-                            StringBuilder sb2 = new StringBuilder(512);
-                            SendMessage(childHwnd, WM_GETTEXT, (IntPtr)sb2.Capacity, sb2);
-                            text = sb2.ToString();
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(text))
-                        {
-                            texts.Add(text);
-                        }
-
-                        // 递归检查子控件的子控件(仅前2层,避免性能问题)
-                        if (depth < 2)
-                        {
-                            CollectAllTextsRecursive(childHwnd, texts, depth + 1, maxDepth);
-                        }
-                    }
-                    catch { }
-
-                    return true;
-                }, IntPtr.Zero);
-            }
-            catch { }
         }
 
         private IntPtr FindDialog(DialogRule rule)
@@ -275,59 +207,61 @@ namespace CorelDrawAutoIgnoreError
         {
             LogDebug($"  [内容匹配] 开始检查关键词: [{string.Join(", ", keywords)}]");
 
-            // 方式1: 优先使用GDI Hook捕获的文本(精准匹配)
-            if (_gdiCapture != null)
+            // 收集窗口控件文本和按钮文本
+            var allTexts = new System.Collections.Generic.List<string>();
+            var buttonTexts = new System.Collections.Generic.List<string>();
+
+            EnumChildWindows(hwnd, (childHwnd, lParam) =>
             {
                 try
                 {
-                    string gdiText = _gdiCapture.GetLatestText();
-                    if (!string.IsNullOrWhiteSpace(gdiText))
+                    StringBuilder classSb = new StringBuilder(256);
+                    GetClassName(childHwnd, classSb, classSb.Capacity);
+                    string className = classSb.ToString();
+
+                    // 方法1: GetWindowText
+                    StringBuilder sb = new StringBuilder(512);
+                    GetWindowText(childHwnd, sb, sb.Capacity);
+                    string text = sb.ToString();
+
+                    // 方法2: SendMessage WM_GETTEXT
+                    if (string.IsNullOrWhiteSpace(text))
                     {
-                        LogDebug($"    [GDI文本] {gdiText.Substring(0, Math.Min(80, gdiText.Length))}...");
+                        StringBuilder sb2 = new StringBuilder(512);
+                        SendMessage(childHwnd, WM_GETTEXT, (IntPtr)sb2.Capacity, sb2);
+                        text = sb2.ToString();
+                    }
 
-                        // 检查是否包含任一关键词
-                        bool anyMatch = keywords.Any(keyword =>
-                            gdiText.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        allTexts.Add(text);
 
-                        if (anyMatch)
+                        // 单独记录按钮文本
+                        if (className.Contains("Button"))
                         {
-                            LogDebug($"    ✓ [GDI匹配成功]");
-                            return true;
-                        }
-                        else
-                        {
-                            LogDebug($"    ✗ [GDI未匹配]");
+                            buttonTexts.Add(text);
                         }
                     }
-                    else
-                    {
-                        LogDebug($"    [GDI文本为空]");
-                    }
                 }
-                catch (Exception ex)
-                {
-                    LogDebug($"    [GDI读取失败] {ex.Message}");
-                }
-            }
-            else
+                catch { }
+
+                return true;
+            }, IntPtr.Zero);
+
+            LogDebug($"    [收集结果] 文本:{allTexts.Count}个, 按钮:{buttonTexts.Count}个");
+            if (buttonTexts.Count > 0)
             {
-                LogDebug($"    [GDI未初始化]");
+                LogDebug($"    [按钮列表] {string.Join(", ", buttonTexts)}");
             }
 
-            // 方式2: 收集窗口控件文本(兜底方案)
-            var allTexts = new System.Collections.Generic.List<string>();
-            CollectAllTextsRecursive(hwnd, allTexts, 0, 3);
-
-            if (allTexts.Count > 0)
+            // 如果没有关键词要求，直接通过（只检查按钮）
+            if (keywords == null || keywords.Count == 0)
             {
-                LogDebug($"    [控件文本] 共收集到 {allTexts.Count} 个文本: [{string.Join(", ", allTexts.Take(5))}...]");
-            }
-            else
-            {
-                LogDebug($"    [控件文本] 未收集到任何文本");
+                LogDebug($"    ✓ [无内容要求] 直接通过");
+                return true;
             }
 
-            // 检查是否包含任一关键词
+            // 检查控件文本是否包含任一关键词
             bool anyKeywordFound = keywords.Any(keyword =>
                 allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
                     text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
@@ -337,50 +271,45 @@ namespace CorelDrawAutoIgnoreError
                 string matchedKeyword = keywords.First(keyword =>
                     allTexts.Any(text => !string.IsNullOrWhiteSpace(text) &&
                         text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0));
-                LogDebug($"    ✓ [控件匹配成功] 关键词: {matchedKeyword}");
+                LogDebug($"    ✓ [内容匹配成功] 关键词: {matchedKeyword}");
                 return true;
             }
-            else
+
+            // 检查按钮组合作为兜底方案
+            if (buttonTexts.Count > 0)
             {
-                LogDebug($"    ✗ [控件未匹配]");
+                LogDebug($"    [按钮组合匹配] 按钮: {string.Join("+", buttonTexts)}");
+
+                // 如果有明确的按钮组合要求，检查是否满足
+                // 例如："关于"+"重试"+"忽略" 这种特定的按钮组合
+                bool hasExpectedButtons = CheckButtonCombination(buttonTexts, keywords);
+                if (hasExpectedButtons)
+                {
+                    LogDebug($"    ✓ [按钮组合匹配成功]");
+                    return true;
+                }
             }
 
-            // 方式3: 按钮组合特征匹配(最后的兜底方案,仅用于"无效的轮廓"错误)
-            // 只对包含"无效的轮廓"的规则启用,避免误匹配其他包含"无效"的规则
-            if (keywords.Contains("无效的轮廓"))
-            {
-                LogDebug($"    [按钮特征] 检查按钮组合...");
-                bool hasAbout = allTexts.Any(t => t.Contains("关于"));
-                bool hasRetry = allTexts.Any(t => t.Contains("重试"));
-                bool hasIgnore = allTexts.Any(t => t.Contains("忽略"));
+            LogDebug($"    ✗ [内容匹配失败]");
+            return false;
+        }
 
-                LogDebug($"      关于:{hasAbout}, 重试:{hasRetry}, 忽略:{hasIgnore}");
+        private bool CheckButtonCombination(System.Collections.Generic.List<string> buttonTexts, System.Collections.Generic.List<string> keywords)
+        {
+            // 针对"无效的轮廓ID"错误的特殊按钮组合：关于+重试+忽略
+            if (keywords.Any(k => k.Contains("无效的轮廓")))
+            {
+                bool hasAbout = buttonTexts.Any(t => t.Contains("关于"));
+                bool hasRetry = buttonTexts.Any(t => t.Contains("重试"));
+                bool hasIgnore = buttonTexts.Any(t => t.Contains("忽略"));
 
                 if (hasAbout && hasRetry && hasIgnore)
                 {
-                    StringBuilder titleSb = new StringBuilder(256);
-                    GetWindowText(hwnd, titleSb, titleSb.Capacity);
-                    string title = titleSb.ToString();
-
-                    LogDebug($"      窗口标题检查: [{title}], 包含' - ':{title.Contains(" - ")}");
-
-                    if (!title.Contains(" - "))
-                    {
-                        LogDebug($"    ✓ [按钮特征匹配成功] 关于+重试+忽略");
-                        return true;
-                    }
-                    else
-                    {
-                        LogDebug($"    ✗ [按钮特征失败] 标题包含' - '");
-                    }
-                }
-                else
-                {
-                    LogDebug($"    ✗ [按钮特征失败] 按钮组合不满足");
+                    LogDebug($"      检测到特征按钮组合: 关于+重试+忽略");
+                    return true;
                 }
             }
 
-            LogDebug($"  ✗ [内容匹配失败] 所有匹配方式都失败");
             return false;
         }
 
@@ -465,72 +394,5 @@ namespace CorelDrawAutoIgnoreError
         }
 
         public string GetLogPath() => _logPath;
-
-        private void TryInjectHookDll()
-        {
-            try
-            {
-                // 检测CorelDRAW进程
-                int pid = DllInjector.FindCorelDrawProcess();
-                if (pid > 0)
-                {
-                    LogDebug($"检测到CorelDRAW进程 (PID: {pid})");
-
-                    // 获取DLL路径
-                    string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GdiHook.dll");
-                    if (!File.Exists(dllPath))
-                    {
-                        LogDebug($"GdiHook.dll未找到: {dllPath}");
-                        return;
-                    }
-
-                    // 注入DLL
-                    if (DllInjector.InjectDll(pid, dllPath))
-                    {
-                        LogDebug("GDI Hook DLL注入成功");
-                        _dllInjected = true;
-
-                        // 等待Hook初始化并创建共享内存
-                        Thread.Sleep(1000);
-
-                        // 初始化共享内存读取（重试最多3次）
-                        _gdiCapture = new GdiTextCapture();
-                        bool connected = false;
-                        for (int i = 0; i < 3; i++)
-                        {
-                            if (_gdiCapture.Initialize())
-                            {
-                                LogDebug($"共享内存连接成功 (第{i+1}次尝试)");
-                                connected = true;
-                                break;
-                            }
-                            else
-                            {
-                                LogDebug($"共享内存连接失败 (第{i+1}次尝试), 等待后重试...");
-                                Thread.Sleep(500);
-                            }
-                        }
-
-                        if (!connected)
-                        {
-                            LogDebug("共享内存连接失败，GDI文本捕获将不可用");
-                            LogDebug("可能原因: 权限问题或Hook初始化失败");
-                        }
-                    }
-                    else
-                    {
-                        LogDebug("GDI Hook DLL注入失败");
-                    }
-                }
-                else
-                {
-                    LogDebug("未检测到CorelDRAW进程,将在检测到后自动注入");
-                }
-            }
-            catch (Exception ex)
-            {
-                LogDebug($"注入DLL时发生错误: {ex.Message}");
-            }
-        }
     }
 }
