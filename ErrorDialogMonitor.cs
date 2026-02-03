@@ -43,21 +43,11 @@ namespace CorelDrawAutoIgnoreError
         [DllImport("user32.dll")]
         private static extern IntPtr GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
-        [DllImport("user32.dll")]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
-
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         private delegate bool EnumChildProc(IntPtr hwnd, IntPtr lParam);
 
         private const uint BM_CLICK = 0x00F5;
         private const uint WM_GETTEXT = 0x000D;
-        private const uint WM_KEYDOWN = 0x0100;
-        private const uint WM_KEYUP = 0x0101;
-        private const int VK_RETURN = 0x0D;
-        private const uint KEYEVENTF_KEYUP = 0x0002;
 
         public ErrorDialogMonitor()
         {
@@ -138,21 +128,8 @@ namespace CorelDrawAutoIgnoreError
                             }
                             else
                             {
-                                LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}',尝试发送回车键");
+                                LogDebug($"✗ 未找到按钮 '{rule.ButtonToClick}'，跳过处理");
                                 LogWindowDetails(dialog);
-
-                                // 先激活窗口
-                                SetForegroundWindow(dialog);
-                                Thread.Sleep(100);
-
-                                // 使用 keybd_event 模拟全局键盘输入
-                                keybd_event(VK_RETURN, 0, 0, UIntPtr.Zero);  // 按下回车
-                                Thread.Sleep(50);
-                                keybd_event(VK_RETURN, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);  // 释放回车
-
-                                _autoClickCount++;
-                                LogDebug($"✓ 已发送回车键 (第{_autoClickCount}次)");
-                                Thread.Sleep(500);
                             }
 
                             // 找到并处理一个对话框后，跳出循环，避免重复处理
