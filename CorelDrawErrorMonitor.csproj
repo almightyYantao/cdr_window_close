@@ -24,6 +24,7 @@
     <!-- 排除不需要的文件 -->
     <Compile Remove="CorelDrawPlugin.cs" />
     <Compile Remove="CorelDrawPluginSimple.cs" />
+    <Compile Remove="ButtonDetectorStandalone.cs" />
   </ItemGroup>
 
   <ItemGroup>
