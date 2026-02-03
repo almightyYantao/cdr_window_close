@@ -15,7 +15,7 @@
     {
       "name": "无效标头错误",
       "windowTitleContains": ["CorelDRAW"],
-      "contentContains": ["无效标"],
+      "contentContains": [],
       "buttonToClick": "OK"
     }
   ],

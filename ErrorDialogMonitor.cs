@@ -187,6 +187,13 @@ namespace CorelDrawAutoIgnoreError
 
                 if (!titleMatch) return true;
 
+                // 排除主窗口（主窗口标题包含 " - " 如 "CorelDRAW - 未命名-1"）
+                // 错误对话框标题通常是 "CorelDRAW (评估版)" 不包含 " - "
+                if (title.Contains(" - "))
+                {
+                    return true;
+                }
+
                 LogDebug($"  [规则:{rule.Name}] 标题匹配成功: [{title}]");
 
                 // 检查窗口内容
